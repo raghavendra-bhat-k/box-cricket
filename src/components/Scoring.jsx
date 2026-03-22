@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import db, { getMatch, updateMatch, getBalls, addBall, removeLastBall, updateBall } from '../db'
-import { calculateScore, getCurrentOver, ballDisplay, formatOvers } from '../utils/scoring'
+import { calculateScore, getCurrentOver, ballDisplay, formatOvers, restoreStateFromBalls } from '../utils/scoring'
 import MiniScorebar from './MiniScorebar'
 
 export default function Scoring({ matchId, onBack, onViewScorecard }) {
@@ -38,10 +38,31 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
     const b = await getBalls(matchId, currentInnings)
     setBalls(b)
 
+    // Restore player positions from ball history
+    if (b.length > 0) {
+      const restored = restoreStateFromBalls(b)
+      setStriker(restored.striker)
+      setNonStriker(restored.nonStriker)
+      setBowlerIdx(restored.bowlerIdx)
+    }
+
     if (currentInnings === 2) {
       const firstBalls = await getBalls(matchId, 1)
       const firstScore = calculateScore(firstBalls)
       setFirstInningsScore(firstScore.runs)
+    }
+
+    // Detect if 1st innings was complete but break wasn't shown yet
+    if (currentInnings === 1 && b.length > 0) {
+      const s = calculateScore(b)
+      const tASize = m.teamASize ?? m.playersPerSide
+      const battingCount = Math.max(m.teamA.players?.length || 0, tASize)
+      const allOut = s.wickets >= battingCount - 1
+      const oversComplete = s.legalBalls >= m.totalOvers * 6
+      if (allOut || oversComplete) {
+        setFirstInningsScore(s.runs)
+        setShowInningsBreak(true)
+      }
     }
   }, [matchId])
 
