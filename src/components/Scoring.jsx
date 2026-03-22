@@ -10,15 +10,24 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
   const [striker, setStriker] = useState(0)
   const [nonStriker, setNonStriker] = useState(1)
   const [bowlerIdx, setBowlerIdx] = useState(0)
-  const [sheet, setSheet] = useState(null) // 'wicket' | 'extras' | 'menu' | 'editBall' | 'addPlayer' | 'editNames'
+  const [sheet, setSheet] = useState(null) // 'wicket' | 'extras' | 'menu' | 'editBall' | 'addPlayer' | 'editNames' | 'changeTeamSizes' | 'changeOvers' | 'removePlayer'
   const [extraType, setExtraType] = useState(null)
   const [extraRuns, setExtraRuns] = useState(1)
+  const [customExtraInput, setCustomExtraInput] = useState(false)
+  const [wicketDismissalType, setWicketDismissalType] = useState(null)
+  const [wicketRuns, setWicketRuns] = useState(0)
+  const [customWicketInput, setCustomWicketInput] = useState(false)
   const [showInningsBreak, setShowInningsBreak] = useState(false)
   const [firstInningsScore, setFirstInningsScore] = useState(null)
   const [editingBall, setEditingBall] = useState(null)
+  const [editBallCustom, setEditBallCustom] = useState(false)
+  const [editBallCustomExtras, setEditBallCustomExtras] = useState(false)
   const [addPlayerTeam, setAddPlayerTeam] = useState(null) // 'A' | 'B'
   const [newPlayerName, setNewPlayerName] = useState('')
   const [editNames, setEditNames] = useState({ teamA: [], teamB: [] })
+  const [teamSizesInput, setTeamSizesInput] = useState({ teamASize: 0, teamBSize: 0 })
+  const [oversInput, setOversInput] = useState(0)
+  const [removePlayerTeam, setRemovePlayerTeam] = useState('A')
 
   const loadData = useCallback(async () => {
     const m = await getMatch(matchId)
@@ -52,10 +61,11 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
   const currentOverBalls = getCurrentOver(balls)
   const totalBalls = match.totalOvers * 6
 
-  // For all-out, use the batting team's actual player count (may differ from playersPerSide)
-  const battingPlayerCount = battingTeam.players?.length > 0
-    ? Math.max(battingTeam.players.length, match.playersPerSide)
-    : match.playersPerSide
+  // Per-team sizes with fallback to playersPerSide for backward compat
+  const teamASize = match.teamASize ?? match.playersPerSide
+  const teamBSize = match.teamBSize ?? match.playersPerSide
+  const currentTeamSize = innings === 1 ? teamASize : teamBSize
+  const battingPlayerCount = Math.max(battingTeam.players?.length || 0, currentTeamSize)
   const isAllOut = score.wickets >= battingPlayerCount - 1
   const isOversComplete = score.legalBalls >= totalBalls
   const isInningsOver = isAllOut || isOversComplete
@@ -187,9 +197,17 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
     recordBall({ runs: actualRuns, swapRuns: tapValue })
   }
 
-  function handleWicketSelect(dismissalType) {
-    recordBall({ runs: 0, isWicket: true, dismissalType })
+  function handleWicketSelectType(dismissalType) {
+    setWicketDismissalType(dismissalType)
+    setWicketRuns(0)
+  }
+
+  function handleWicketConfirm() {
+    recordBall({ runs: wicketRuns, isWicket: true, dismissalType: wicketDismissalType })
     setSheet(null)
+    setWicketDismissalType(null)
+    setWicketRuns(0)
+    setCustomWicketInput(false)
   }
 
   function handleExtraConfirm() {
@@ -203,11 +221,14 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
     setSheet(null)
     setExtraType(null)
     setExtraRuns(1)
+    setCustomExtraInput(false)
   }
 
   // --- Edit ball ---
   function openEditBall(ball) {
     setEditingBall({ ...ball })
+    setEditBallCustom(![0, 1, 2, 3, 4, 6].includes(ball.runs) && !ball.isExtra && !ball.isWicket)
+    setEditBallCustomExtras(ball.isExtra && ![1, 2, 3, 4, 6].includes(ball.extraRuns))
     setSheet('editBall')
   }
 
@@ -238,25 +259,80 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
   }
 
   // --- Edit player names ---
+  function ensureSlots(players, size) {
+    const arr = [...(players || [])]
+    while (arr.length < size) arr.push('')
+    return arr
+  }
+
   function openEditNames() {
+    const aSize = match.teamASize ?? match.playersPerSide
+    const bSize = match.teamBSize ?? match.playersPerSide
     setEditNames({
-      teamA: [...(match.teamA.players || [])],
-      teamB: [...(match.teamB.players || [])]
+      teamA: ensureSlots(match.teamA.players, aSize),
+      teamB: ensureSlots(match.teamB.players, bSize)
     })
     setSheet('editNames')
   }
 
   async function saveEditNames() {
+    const cleanA = editNames.teamA.map(n => n.trim())
+    const cleanB = editNames.teamB.map(n => n.trim())
     await updateMatch(matchId, {
-      teamA: { ...match.teamA, players: editNames.teamA },
-      teamB: { ...match.teamB, players: editNames.teamB }
+      teamA: { ...match.teamA, players: cleanA },
+      teamB: { ...match.teamB, players: cleanB }
     })
     setMatch(prev => ({
       ...prev,
-      teamA: { ...prev.teamA, players: editNames.teamA },
-      teamB: { ...prev.teamB, players: editNames.teamB }
+      teamA: { ...prev.teamA, players: cleanA },
+      teamB: { ...prev.teamB, players: cleanB }
     }))
     setSheet(null)
+  }
+
+  // --- Change team sizes ---
+  function openChangeTeamSizes() {
+    setTeamSizesInput({
+      teamASize: match.teamASize ?? match.playersPerSide,
+      teamBSize: match.teamBSize ?? match.playersPerSide
+    })
+    setSheet('changeTeamSizes')
+  }
+
+  async function saveTeamSizes() {
+    const minA = innings === 1 ? score.wickets + 2 : 1
+    const minB = innings === 2 ? score.wickets + 2 : 1
+    const safeA = Math.max(teamSizesInput.teamASize, minA)
+    const safeB = Math.max(teamSizesInput.teamBSize, minB)
+    await updateMatch(matchId, { teamASize: safeA, teamBSize: safeB })
+    setMatch(prev => ({ ...prev, teamASize: safeA, teamBSize: safeB }))
+    setSheet(null)
+  }
+
+  // --- Change overs ---
+  function openChangeOvers() {
+    setOversInput(match.totalOvers)
+    setSheet('changeOvers')
+  }
+
+  async function saveOvers() {
+    const minOvers = Math.ceil(score.legalBalls / 6)
+    const safeOvers = Math.max(oversInput, minOvers)
+    await updateMatch(matchId, { totalOvers: safeOvers })
+    setMatch(prev => ({ ...prev, totalOvers: safeOvers }))
+    setSheet(null)
+  }
+
+  // --- Remove player ---
+  async function handleRemovePlayer(teamKey, index) {
+    const team = match[teamKey]
+    const updatedPlayers = [...(team.players || [])]
+    updatedPlayers.splice(index, 1)
+    await updateMatch(matchId, { [teamKey]: { ...team, players: updatedPlayers } })
+    setMatch(prev => ({
+      ...prev,
+      [teamKey]: { ...prev[teamKey], players: updatedPlayers }
+    }))
   }
 
   // Innings break screen
@@ -352,17 +428,54 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
 
       {/* Wicket bottom sheet */}
       {sheet === 'wicket' && (
-        <div className="bottom-sheet-overlay" onClick={() => setSheet(null)}>
+        <div className="bottom-sheet-overlay" onClick={() => { setSheet(null); setWicketDismissalType(null); setWicketRuns(0); setCustomWicketInput(false) }}>
           <div className="bottom-sheet" onClick={e => e.stopPropagation()}>
-            <h3>Dismissal Type</h3>
-            <div className="sheet-options">
-              {['Bowled', 'Caught', 'Run Out', 'Stumped', 'LBW', 'Hit Wicket'].map(type => (
-                <button key={type} className="sheet-option" onClick={() => handleWicketSelect(type.toLowerCase())}>
-                  {type}
+            <h3>Wicket</h3>
+            {!wicketDismissalType ? (
+              <>
+                <p style={{ marginBottom: 8, fontWeight: 600, color: '#666', fontSize: 14 }}>Dismissal Type</p>
+                <div className="sheet-options">
+                  {['Bowled', 'Caught', 'Run Out', 'Stumped', 'LBW', 'Hit Wicket'].map(type => (
+                    <button key={type} className="sheet-option" onClick={() => handleWicketSelectType(type.toLowerCase())}>
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <p style={{ marginBottom: 8, fontWeight: 600, color: '#666', fontSize: 14 }}>
+                  {wicketDismissalType.replace(/\b\w/g, c => c.toUpperCase())} — Runs scored:
+                </p>
+                <div className="extras-runs">
+                  {[0, 1, 2, 3, 4, 6].map(n => (
+                    <button
+                      key={n}
+                      className={`${wicketRuns === n && !customWicketInput ? 'selected' : ''}`}
+                      onClick={() => { setWicketRuns(n); setCustomWicketInput(false) }}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                  {!customWicketInput ? (
+                    <button onClick={() => { setCustomWicketInput(true); setWicketRuns(5) }}>+</button>
+                  ) : (
+                    <input
+                      type="number"
+                      min="0"
+                      className="custom-number-input"
+                      value={wicketRuns}
+                      onChange={e => setWicketRuns(Math.max(0, parseInt(e.target.value) || 0))}
+                      autoFocus
+                    />
+                  )}
+                </div>
+                <button className="btn btn-primary" style={{ marginTop: 14, width: '100%' }} onClick={handleWicketConfirm}>
+                  Confirm
                 </button>
-              ))}
-            </div>
-            <button className="sheet-cancel" onClick={() => setSheet(null)}>Cancel</button>
+              </>
+            )}
+            <button className="sheet-cancel" onClick={() => { setSheet(null); setWicketDismissalType(null); setWicketRuns(0); setCustomWicketInput(false) }}>Cancel</button>
           </div>
         </div>
       )}
@@ -386,15 +499,27 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
                   {extraType === 'wide' ? 'Wide' : extraType === 'noBall' ? 'No Ball' : extraType === 'bye' ? 'Bye' : 'Leg Bye'} — Runs:
                 </p>
                 <div className="extras-runs">
-                  {[1, 2, 3, 4, 5].map(n => (
+                  {[1, 2, 3, 4, 6].map(n => (
                     <button
                       key={n}
-                      className={extraRuns === n ? 'selected' : ''}
-                      onClick={() => setExtraRuns(n)}
+                      className={`${extraRuns === n && !customExtraInput ? 'selected' : ''}`}
+                      onClick={() => { setExtraRuns(n); setCustomExtraInput(false) }}
                     >
                       {n}
                     </button>
                   ))}
+                  {!customExtraInput ? (
+                    <button onClick={() => { setCustomExtraInput(true); setExtraRuns(7) }}>+</button>
+                  ) : (
+                    <input
+                      type="number"
+                      min="1"
+                      className="custom-number-input"
+                      value={extraRuns}
+                      onChange={e => setExtraRuns(Math.max(1, parseInt(e.target.value) || 1))}
+                      autoFocus
+                    />
+                  )}
                 </div>
                 <button className="btn btn-primary" style={{ marginTop: 14, width: '100%' }} onClick={handleExtraConfirm}>
                   Confirm
@@ -420,6 +545,15 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
               </button>
               <button className="menu-item" onClick={openEditNames}>
                 Edit Player Names
+              </button>
+              <button className="menu-item" onClick={() => { setRemovePlayerTeam('A'); setSheet('removePlayer') }}>
+                Remove Player
+              </button>
+              <button className="menu-item" onClick={openChangeTeamSizes}>
+                Change Team Sizes
+              </button>
+              <button className="menu-item" onClick={openChangeOvers}>
+                Change Overs
               </button>
               <button className="menu-item" onClick={() => { setSheet(null); onViewScorecard() }}>
                 View Scorecard
@@ -515,20 +649,32 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
                 {[0, 1, 2, 3, 4, 6].map(r => (
                   <button
                     key={r}
-                    className={`edit-run-btn ${editingBall.runs === r && !editingBall.isExtra && !editingBall.isWicket ? 'selected' : ''}`}
-                    onClick={() => setEditingBall(prev => ({ ...prev, runs: r, isExtra: false, isWicket: false, extraType: null, extraRuns: 0, dismissalType: null }))}
+                    className={`edit-run-btn ${editingBall.runs === r && !editBallCustom ? 'selected' : ''}`}
+                    onClick={() => { setEditBallCustom(false); setEditingBall(prev => ({ ...prev, runs: r, isExtra: false, extraType: null, extraRuns: 0 })) }}
                   >
                     {r}
                   </button>
                 ))}
+                {!editBallCustom ? (
+                  <button className="edit-run-btn" onClick={() => { setEditBallCustom(true); setEditingBall(prev => ({ ...prev, runs: 5, isExtra: false, extraType: null, extraRuns: 0 })) }}>+</button>
+                ) : (
+                  <input
+                    type="number"
+                    min="0"
+                    className="custom-number-input"
+                    value={editingBall.runs}
+                    onChange={e => setEditingBall(prev => ({ ...prev, runs: Math.max(0, parseInt(e.target.value) || 0) }))}
+                    autoFocus
+                  />
+                )}
               </div>
             </div>
             <div className="edit-ball-section">
-              <label>Or mark as:</label>
+              <label>Also mark as:</label>
               <div className="edit-ball-runs">
                 <button
                   className={`edit-run-btn wicket-sel ${editingBall.isWicket ? 'selected' : ''}`}
-                  onClick={() => setEditingBall(prev => ({ ...prev, isWicket: true, runs: 0, isExtra: false, dismissalType: prev.dismissalType || 'bowled' }))}
+                  onClick={() => setEditingBall(prev => ({ ...prev, isWicket: !prev.isWicket, isExtra: prev.isWicket ? prev.isExtra : false, dismissalType: prev.isWicket ? null : (prev.dismissalType || 'run out') }))}
                 >
                   W
                 </button>
@@ -546,19 +692,48 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
                 </button>
               </div>
             </div>
+            {editingBall.isWicket && (
+              <div className="edit-ball-section">
+                <label>Dismissal type</label>
+                <div className="edit-ball-runs">
+                  {['Bowled', 'Caught', 'Run Out', 'Stumped', 'LBW', 'Hit Wicket'].map(type => (
+                    <button
+                      key={type}
+                      className={`edit-run-btn ${editingBall.dismissalType === type.toLowerCase() ? 'selected' : ''}`}
+                      onClick={() => setEditingBall(prev => ({ ...prev, dismissalType: type.toLowerCase() }))}
+                      style={{ width: 'auto', borderRadius: 8, padding: '6px 10px', fontSize: 13 }}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {editingBall.isExtra && (
               <div className="edit-ball-section">
                 <label>Extra runs</label>
                 <div className="edit-ball-runs">
-                  {[1, 2, 3, 4, 5].map(n => (
+                  {[1, 2, 3, 4, 6].map(n => (
                     <button
                       key={n}
-                      className={`edit-run-btn ${editingBall.extraRuns === n ? 'selected' : ''}`}
-                      onClick={() => setEditingBall(prev => ({ ...prev, extraRuns: n }))}
+                      className={`edit-run-btn ${editingBall.extraRuns === n && !editBallCustomExtras ? 'selected' : ''}`}
+                      onClick={() => { setEditBallCustomExtras(false); setEditingBall(prev => ({ ...prev, extraRuns: n })) }}
                     >
                       {n}
                     </button>
                   ))}
+                  {!editBallCustomExtras ? (
+                    <button className="edit-run-btn" onClick={() => { setEditBallCustomExtras(true); setEditingBall(prev => ({ ...prev, extraRuns: 7 })) }}>+</button>
+                  ) : (
+                    <input
+                      type="number"
+                      min="1"
+                      className="custom-number-input"
+                      value={editingBall.extraRuns}
+                      onChange={e => setEditingBall(prev => ({ ...prev, extraRuns: Math.max(1, parseInt(e.target.value) || 1) }))}
+                      autoFocus
+                    />
+                  )}
                 </div>
               </div>
             )}
@@ -566,6 +741,89 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
               Save Changes
             </button>
             <button className="sheet-cancel" onClick={() => { setSheet(null); setEditingBall(null) }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Change team sizes sheet */}
+      {sheet === 'changeTeamSizes' && (
+        <div className="bottom-sheet-overlay" onClick={() => setSheet('menu')}>
+          <div className="bottom-sheet" onClick={e => e.stopPropagation()}>
+            <h3>Change Team Sizes</h3>
+            <div className="form-group">
+              <label>{match.teamA.name} players</label>
+              <input
+                type="number"
+                min={innings === 1 ? score.wickets + 2 : 1}
+                value={teamSizesInput.teamASize}
+                onChange={e => setTeamSizesInput(prev => ({ ...prev, teamASize: Math.max(1, parseInt(e.target.value) || 1) }))}
+              />
+              {innings === 1 && <small style={{ color: '#999', fontSize: 12 }}>Min: {score.wickets + 2} (wickets + 2)</small>}
+            </div>
+            <div className="form-group">
+              <label>{match.teamB.name} players</label>
+              <input
+                type="number"
+                min={innings === 2 ? score.wickets + 2 : 1}
+                value={teamSizesInput.teamBSize}
+                onChange={e => setTeamSizesInput(prev => ({ ...prev, teamBSize: Math.max(1, parseInt(e.target.value) || 1) }))}
+              />
+              {innings === 2 && <small style={{ color: '#999', fontSize: 12 }}>Min: {score.wickets + 2} (wickets + 2)</small>}
+            </div>
+            <button className="btn btn-primary" style={{ width: '100%' }} onClick={saveTeamSizes}>
+              Save
+            </button>
+            <button className="sheet-cancel" onClick={() => setSheet('menu')}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Change overs sheet */}
+      {sheet === 'changeOvers' && (
+        <div className="bottom-sheet-overlay" onClick={() => setSheet('menu')}>
+          <div className="bottom-sheet" onClick={e => e.stopPropagation()}>
+            <h3>Change Overs</h3>
+            <div className="form-group">
+              <label>Total Overs</label>
+              <input
+                type="number"
+                min={Math.ceil(score.legalBalls / 6)}
+                value={oversInput}
+                onChange={e => setOversInput(Math.max(1, parseInt(e.target.value) || 1))}
+              />
+              {score.legalBalls > 0 && <small style={{ color: '#999', fontSize: 12 }}>Min: {Math.ceil(score.legalBalls / 6)} (already bowled)</small>}
+            </div>
+            <button className="btn btn-primary" style={{ width: '100%' }} onClick={saveOvers}>
+              Save
+            </button>
+            <button className="sheet-cancel" onClick={() => setSheet('menu')}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Remove player sheet */}
+      {sheet === 'removePlayer' && (
+        <div className="bottom-sheet-overlay" onClick={() => setSheet('menu')}>
+          <div className="bottom-sheet" onClick={e => e.stopPropagation()}>
+            <h3>Remove Player</h3>
+            <div className="extras-runs" style={{ marginBottom: 14 }}>
+              <button className={removePlayerTeam === 'A' ? 'selected' : ''} onClick={() => setRemovePlayerTeam('A')}>{match.teamA.name}</button>
+              <button className={removePlayerTeam === 'B' ? 'selected' : ''} onClick={() => setRemovePlayerTeam('B')}>{match.teamB.name}</button>
+            </div>
+            <div style={{ maxHeight: '40vh', overflowY: 'auto' }}>
+              {(removePlayerTeam === 'A' ? match.teamA : match.teamB).players?.map((name, i) => (
+                <div key={i} className="remove-player-row">
+                  <span>{name || `Player ${i + 1}`}</span>
+                  <button className="btn btn-danger btn-small" onClick={() => handleRemovePlayer(removePlayerTeam === 'A' ? 'teamA' : 'teamB', i)}>
+                    Remove
+                  </button>
+                </div>
+              ))}
+              {(!((removePlayerTeam === 'A' ? match.teamA : match.teamB).players?.length)) && (
+                <p style={{ color: '#999', fontSize: 14 }}>No named players</p>
+              )}
+            </div>
+            <button className="sheet-cancel" onClick={() => setSheet('menu')}>Back</button>
           </div>
         </div>
       )}

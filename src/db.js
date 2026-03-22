@@ -17,6 +17,8 @@ export async function createMatch({ teamA, teamB, totalOvers, playersPerSide, te
     teamB: { name: teamB, players: teamBPlayers || [] },
     totalOvers,
     playersPerSide,
+    teamASize: playersPerSide,
+    teamBSize: playersPerSide,
     currentInnings: 1,
     result: null,
     rules: rules || null

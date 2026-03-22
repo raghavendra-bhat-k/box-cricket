@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react'
 import { getAllMatches } from '../db'
 
-export default function MatchList({ onResume, onView }) {
+function isToday(dateStr) {
+  const d = new Date(dateStr)
+  const now = new Date()
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+}
+
+export default function MatchList({ onResume, onView, onRematch }) {
   const [matches, setMatches] = useState([])
 
   useEffect(() => {
@@ -28,6 +34,11 @@ export default function MatchList({ onResume, onView }) {
             {m.status === 'live' && (
               <button className="btn btn-small btn-primary" onClick={() => onResume(m.id)}>
                 Resume
+              </button>
+            )}
+            {isToday(m.date) && (
+              <button className="btn btn-small btn-secondary" onClick={() => onRematch(m)}>
+                Rematch
               </button>
             )}
             <button className="btn btn-small btn-secondary" onClick={() => onView(m.id)}>

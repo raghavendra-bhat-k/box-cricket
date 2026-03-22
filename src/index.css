@@ -550,3 +550,39 @@ body {
   vertical-align: middle;
 }
 
+/* Custom number input for extras/edit ball + button */
+.custom-number-input {
+  width: 56px;
+  height: 44px;
+  border-radius: 22px;
+  border: 2px solid var(--green-dark);
+  background: var(--card-bg);
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--text);
+  -moz-appearance: textfield;
+}
+.custom-number-input::-webkit-inner-spin-button,
+.custom-number-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.custom-number-input:focus {
+  outline: none;
+  border-color: var(--green-mid);
+}
+
+/* Remove player row */
+.remove-player-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.remove-player-row span {
+  font-size: 15px;
+  font-weight: 500;
+}
+
