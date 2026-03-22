@@ -10,17 +10,20 @@ const DEFAULT_BUTTONS = [
   { tap: 6, label: '6', enabled: true },
 ]
 
-export default function NewMatch({ onBack, onStart }) {
-  const [teamA, setTeamA] = useState('')
-  const [teamB, setTeamB] = useState('')
-  const [totalOvers, setTotalOvers] = useState(6)
-  const [playersPerSide, setPlayersPerSide] = useState(6)
-  const [showPlayers, setShowPlayers] = useState(false)
-  const [teamAPlayers, setTeamAPlayers] = useState([])
-  const [teamBPlayers, setTeamBPlayers] = useState([])
-  const [showRules, setShowRules] = useState(false)
-  const [runMap, setRunMap] = useState({})       // e.g. { 1: 2 } means tap-1 records 2 runs
-  const [disabledRuns, setDisabledRuns] = useState({}) // e.g. { 2: true, 3: true }
+export default function NewMatch({ onBack, onStart, rematchFrom }) {
+  const prev = rematchFrom
+  const [teamA, setTeamA] = useState(prev?.teamA?.name || '')
+  const [teamB, setTeamB] = useState(prev?.teamB?.name || '')
+  const [totalOvers, setTotalOvers] = useState(prev?.totalOvers || 6)
+  const [playersPerSide, setPlayersPerSide] = useState(prev?.playersPerSide || 6)
+  const [showPlayers, setShowPlayers] = useState(!!(prev?.teamA?.players?.length || prev?.teamB?.players?.length))
+  const [teamAPlayers, setTeamAPlayers] = useState(prev?.teamA?.players || [])
+  const [teamBPlayers, setTeamBPlayers] = useState(prev?.teamB?.players || [])
+  const [showRules, setShowRules] = useState(!!(prev?.rules))
+  const [runMap, setRunMap] = useState(prev?.rules?.runMap || {})
+  const [disabledRuns, setDisabledRuns] = useState(
+    prev?.rules?.disabledRuns ? Object.fromEntries(prev.rules.disabledRuns.map(r => [r, true])) : {}
+  )
 
   function ensurePlayerSlots(count, existing) {
     const arr = [...existing]
