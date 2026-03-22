@@ -15,7 +15,7 @@ export function calculateScore(balls) {
         extras.wides += totalRuns;
         // wide doesn't count as legal ball
       } else if (ball.extraType === 'noBall') {
-        extras.noBalls += totalRuns;
+        extras.noBalls += (ball.extraRuns || 0);
         // no ball doesn't count as legal ball
       } else {
         // bye/legBye is a legal ball
@@ -36,17 +36,14 @@ export function calculateScore(balls) {
         batsmen[batKey] = { runs: 0, balls: 0, fours: 0, sixes: 0, howOut: 'not out' };
       }
       if (!ball.isExtra || ball.extraType === 'noBall') {
-        // Batsman gets credited runs on normal balls and no-balls
-        if (!ball.isExtra) {
-          batsmen[batKey].runs += ball.runs;
-        }
+        batsmen[batKey].runs += ball.runs;
       }
       // Count ball faced (not on wides)
       if (!ball.isExtra || ball.extraType !== 'wide') {
         batsmen[batKey].balls++;
       }
-      if (!ball.isExtra && ball.runs === 4) batsmen[batKey].fours++;
-      if (!ball.isExtra && ball.runs === 6) batsmen[batKey].sixes++;
+      if ((!ball.isExtra || ball.extraType === 'noBall') && ball.runs === 4) batsmen[batKey].fours++;
+      if ((!ball.isExtra || ball.extraType === 'noBall') && ball.runs === 6) batsmen[batKey].sixes++;
       if (ball.isWicket) {
         batsmen[batKey].howOut = ball.dismissalType || 'out';
       }
@@ -137,7 +134,7 @@ export function getCurrentOver(balls) {
 }
 
 export function ballDisplay(ball) {
-  if (ball.isWicket) return 'W';
+  if (ball.isWicket) return ball.runs > 0 ? `W${ball.runs}` : 'W';
   if (ball.isExtra) {
     const prefix = ball.extraType === 'wide' ? 'Wd' :
                    ball.extraType === 'noBall' ? 'Nb' :

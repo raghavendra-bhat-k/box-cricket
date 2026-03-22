@@ -124,12 +124,23 @@ describe('calculateScore', () => {
   })
 
   it('supports extras with 6+ runs (no-ball 8)', () => {
+    // New format: batsman hit 7, penalty 1
     const balls = [
-      makeBall({ runs: 0, isExtra: true, extraType: 'noBall', extraRuns: 8 }),
+      makeBall({ runs: 7, isExtra: true, extraType: 'noBall', extraRuns: 1 }),
     ]
     const s = calculateScore(balls)
     expect(s.runs).toBe(8)
-    expect(s.extras.noBalls).toBe(8)
+    expect(s.extras.noBalls).toBe(1)
+  })
+
+  it('backward compat: old no-ball format (runs=0, extraRuns=N)', () => {
+    // Old data: all runs in extraRuns
+    const balls = [
+      makeBall({ runs: 0, isExtra: true, extraType: 'noBall', extraRuns: 5 }),
+    ]
+    const s = calculateScore(balls)
+    expect(s.runs).toBe(5)
+    expect(s.extras.noBalls).toBe(5)
   })
 
   it('tracks batsman stats correctly', () => {
@@ -176,14 +187,27 @@ describe('calculateScore', () => {
     expect(s.legalBalls).toBe(8)
   })
 
-  it('batsman gets credited runs on no-ball faced (not extra runs)', () => {
+  it('batsman gets credited runs on no-ball', () => {
+    // New format: batsman hit 3, penalty 1, total 4
     const balls = [
-      makeBall({ runs: 0, isExtra: true, extraType: 'noBall', extraRuns: 1, batsmanIndex: 0 }),
+      makeBall({ runs: 3, isExtra: true, extraType: 'noBall', extraRuns: 1, batsmanIndex: 0 }),
     ]
     const s = calculateScore(balls)
-    // On no-ball, batsman faces but doesn't get credited runs (runs=0)
-    expect(s.batsmen[0].runs).toBe(0)
-    expect(s.batsmen[0].balls).toBe(1) // no-ball counts as ball faced
+    expect(s.batsmen[0].runs).toBe(3)
+    expect(s.batsmen[0].balls).toBe(1)
+    expect(s.extras.noBalls).toBe(1)
+    expect(s.runs).toBe(4) // 3 batsman + 1 penalty
+  })
+
+  it('no-ball boundary credited to batsman fours/sixes', () => {
+    const balls = [
+      makeBall({ runs: 4, isExtra: true, extraType: 'noBall', extraRuns: 1, batsmanIndex: 0 }),
+      makeBall({ runs: 6, isExtra: true, extraType: 'noBall', extraRuns: 1, batsmanIndex: 0 }),
+    ]
+    const s = calculateScore(balls)
+    expect(s.batsmen[0].fours).toBe(1)
+    expect(s.batsmen[0].sixes).toBe(1)
+    expect(s.batsmen[0].runs).toBe(10)
   })
 
   it('batsman fours and sixes not counted on extras', () => {
@@ -366,9 +390,12 @@ describe('ballDisplay', () => {
     expect(ballDisplay(makeBall({ isExtra: true, extraType: 'wide', runs: 0, extraRuns: 7 }))).toBe('Wd7')
   })
 
-  it('wicket takes priority in display', () => {
-    // A ball that is both wicket and has runs should show W
-    expect(ballDisplay(makeBall({ runs: 2, isWicket: true, dismissalType: 'run out' }))).toBe('W')
+  it('wicket with 0 runs shows W', () => {
+    expect(ballDisplay(makeBall({ runs: 0, isWicket: true, dismissalType: 'bowled' }))).toBe('W')
+  })
+
+  it('wicket with runs shows W plus runs', () => {
+    expect(ballDisplay(makeBall({ runs: 2, isWicket: true, dismissalType: 'run out' }))).toBe('W2')
   })
 })
 
@@ -469,6 +496,20 @@ describe('restoreStateFromBalls', () => {
     // Wicket: s = max(0,1)+1 = 2
     expect(state.striker).toBe(2)
     expect(state.nonStriker).toBe(1)
+  })
+
+  it('odd runs on last ball of over cancels out (swap + end-of-over swap)', () => {
+    // 5 dots + 1 single = end of over
+    // Single swaps strike, then end-of-over swaps back
+    const balls = [
+      ...Array.from({ length: 5 }, () => makeBall({ runs: 0 })),
+      makeBall({ runs: 1 }),
+    ]
+    const state = restoreStateFromBalls(balls)
+    // Odd run swap: s=1,ns=0, then end-of-over swap: s=0,ns=1 — back to original
+    expect(state.striker).toBe(0)
+    expect(state.nonStriker).toBe(1)
+    expect(state.bowlerIdx).toBe(1)
   })
 
   it('restores correctly after 1.3 overs (9 legal balls)', () => {
