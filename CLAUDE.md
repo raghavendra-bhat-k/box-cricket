@@ -6,7 +6,8 @@ Before pushing any commit to the remote:
 1. Run `npm test` — all tests must pass (100% success rate)
 2. Run `npm run test:coverage` — verify at least 80% statement coverage
 3. If any test fails, fix the issue before pushing
-4. New features/bug fixes must include corresponding test cases
+4. **All changes** (features, bug fixes, refactors) must include corresponding test cases
+5. Existing tests must not break — run full suite before committing
 
 ## Branching & PR Workflow
 

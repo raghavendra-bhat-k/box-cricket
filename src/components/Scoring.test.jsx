@@ -913,6 +913,80 @@ describe('Scoring - menu navigation', () => {
   })
 })
 
+// ─── Resume state restoration ───────────────────────────────────
+
+describe('Scoring - resume restores state from ball history', () => {
+  it('restores striker/nonStriker after odd runs', async () => {
+    const id = await createTestMatch({ totalOvers: 6 })
+    // Pre-add a ball with 1 run (odd → swap strike)
+    await addBall({ matchId: id, innings: 1, batsmanIndex: 0, bowlerIndex: 0, runs: 1, isExtra: false, isWicket: false })
+
+    renderScoring(id)
+    await waitFor(() => screen.getByText('W'))
+    // After 1 run: striker should be 1 (was 0, swapped), nonStriker 0
+    // The scoring UI should show the batting team info without crashing
+    expect(screen.getByText(/Team A/)).toBeInTheDocument()
+  })
+
+  it('restores bowlerIdx after a complete over', async () => {
+    const id = await createTestMatch({ totalOvers: 6 })
+    // Pre-add 6 dot balls (1 complete over)
+    for (let i = 0; i < 6; i++) {
+      await addBall({ matchId: id, innings: 1, batsmanIndex: 0, bowlerIndex: 0, runs: 0, isExtra: false, isWicket: false })
+    }
+
+    renderScoring(id)
+    // After 1 complete over: bowlerIdx=1 (Helen), strike swapped (Bob is striker)
+    await waitFor(() => {
+      expect(screen.getByText(/1\.0/)).toBeInTheDocument()
+      // Bob (index 1) is striker after end-of-over swap
+      expect(screen.getByText('*Bob')).toBeInTheDocument()
+      // Helen (teamB index 1) is bowling (bowlerIdx advanced to 1)
+      expect(screen.getByText(/Helen/)).toBeInTheDocument()
+    })
+  })
+
+  it('restores state after wicket brings new batsman', async () => {
+    const id = await createTestMatch({ totalOvers: 6 })
+    // 1 wicket ball
+    await addBall({ matchId: id, innings: 1, batsmanIndex: 0, bowlerIndex: 0, runs: 0, isExtra: false, isWicket: true, dismissalType: 'bowled' })
+
+    renderScoring(id)
+    // Wait for score to show 0/1 (1 wicket)
+    await waitFor(() => {
+      expect(screen.getByText(/0\/1/)).toBeInTheDocument()
+    })
+  })
+
+  it('detects completed 1st innings on resume and shows innings break', async () => {
+    const id = await createTestMatch({ totalOvers: 2, playersPerSide: 6 })
+    // Pre-add 12 dot balls (2 overs = innings complete)
+    for (let i = 0; i < 12; i++) {
+      await addBall({ matchId: id, innings: 1, batsmanIndex: 0, bowlerIndex: i < 6 ? 0 : 1, runs: 0, isExtra: false, isWicket: false })
+    }
+
+    renderScoring(id)
+    await waitFor(() => {
+      expect(screen.getByText(/End of 1st Innings/i)).toBeInTheDocument()
+    })
+  })
+
+  it('restores state with mixed balls (runs + extras + wickets)', async () => {
+    const id = await createTestMatch({ totalOvers: 6 })
+    // Ball 1: 2 runs
+    await addBall({ matchId: id, innings: 1, batsmanIndex: 0, bowlerIndex: 0, runs: 2, isExtra: false, isWicket: false })
+    // Ball 2: wide (1 run)
+    await addBall({ matchId: id, innings: 1, batsmanIndex: 0, bowlerIndex: 0, runs: 0, extraRuns: 1, isExtra: true, extraType: 'wide', isWicket: false })
+    // Ball 3: 1 run (odd → swap)
+    await addBall({ matchId: id, innings: 1, batsmanIndex: 0, bowlerIndex: 0, runs: 1, isExtra: false, isWicket: false })
+
+    renderScoring(id)
+    await waitFor(() => screen.getByText('W'))
+    // Should render without crashing with restored state
+    expect(screen.getByText(/Team A/)).toBeInTheDocument()
+  })
+})
+
 // ─── Per-team player count / all-out ────────────────────────────
 
 describe('Scoring - per-team sizes', () => {

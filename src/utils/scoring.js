@@ -147,3 +147,36 @@ export function ballDisplay(ball) {
   if (ball.runs === 0) return '.';
   return String(ball.runs);
 }
+
+// Reconstruct striker, nonStriker, bowlerIdx from ball history (for resume)
+export function restoreStateFromBalls(ballHistory) {
+  let s = 0, ns = 1, bowler = 0
+  let legalBalls = 0
+
+  for (const ball of ballHistory) {
+    const isLegal = !ball.isExtra || (ball.extraType !== 'wide' && ball.extraType !== 'noBall')
+    const totalRuns = ball.runs + (ball.extraRuns || 0)
+
+    // Strike rotation for odd runs (excluding wickets)
+    if (!ball.isWicket && totalRuns % 2 === 1) {
+      ;[s, ns] = [ns, s]
+    }
+
+    // Wicket: new batsman comes in at striker's end
+    if (ball.isWicket) {
+      s = Math.max(s, ns) + 1
+    }
+
+    if (isLegal) legalBalls++
+
+    // End of over: swap strike + new bowler
+    if (legalBalls > 0 && legalBalls % 6 === 0 && isLegal) {
+      if (!ball.isWicket) {
+        ;[s, ns] = [ns, s]
+      }
+      bowler++
+    }
+  }
+
+  return { striker: s, nonStriker: ns, bowlerIdx: bowler }
+}

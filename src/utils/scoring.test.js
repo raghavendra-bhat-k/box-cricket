@@ -6,6 +6,7 @@ import {
   calculateRequiredRR,
   getCurrentOver,
   ballDisplay,
+  restoreStateFromBalls,
 } from './scoring'
 
 // Helper to create a ball object
@@ -368,5 +369,117 @@ describe('ballDisplay', () => {
   it('wicket takes priority in display', () => {
     // A ball that is both wicket and has runs should show W
     expect(ballDisplay(makeBall({ runs: 2, isWicket: true, dismissalType: 'run out' }))).toBe('W')
+  })
+})
+
+// ─── restoreStateFromBalls ──────────────────────────────────────
+
+describe('restoreStateFromBalls', () => {
+  it('returns initial state for empty balls', () => {
+    const state = restoreStateFromBalls([])
+    expect(state).toEqual({ striker: 0, nonStriker: 1, bowlerIdx: 0 })
+  })
+
+  it('swaps strike on odd runs', () => {
+    const balls = [makeBall({ runs: 1 })]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(1) // swapped
+    expect(state.nonStriker).toBe(0)
+  })
+
+  it('does not swap strike on even runs', () => {
+    const balls = [makeBall({ runs: 2 })]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(0)
+    expect(state.nonStriker).toBe(1)
+  })
+
+  it('brings in new batsman on wicket', () => {
+    const balls = [makeBall({ runs: 0, isWicket: true, dismissalType: 'bowled' })]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(2) // next batsman
+    expect(state.nonStriker).toBe(1)
+  })
+
+  it('increments bowler at end of over', () => {
+    // 6 dot balls = end of over
+    const balls = Array.from({ length: 6 }, () => makeBall({ runs: 0 }))
+    const state = restoreStateFromBalls(balls)
+    expect(state.bowlerIdx).toBe(1) // next bowler
+  })
+
+  it('swaps strike at end of over (even runs over)', () => {
+    // 6 dot balls: end of over swaps strike
+    const balls = Array.from({ length: 6 }, () => makeBall({ runs: 0 }))
+    const state = restoreStateFromBalls(balls)
+    // After 6 dots: no mid-ball swaps, then end-of-over swap
+    expect(state.striker).toBe(1)
+    expect(state.nonStriker).toBe(0)
+  })
+
+  it('handles wide (no legal ball count)', () => {
+    const balls = [
+      makeBall({ runs: 0, isExtra: true, extraType: 'wide', extraRuns: 1 }),
+    ]
+    const state = restoreStateFromBalls(balls)
+    // Wide with 1 run = odd, swaps strike
+    expect(state.striker).toBe(1)
+    expect(state.nonStriker).toBe(0)
+    expect(state.bowlerIdx).toBe(0) // not a legal ball, no over change
+  })
+
+  it('handles no-ball (no legal ball count)', () => {
+    const balls = [
+      makeBall({ runs: 0, isExtra: true, extraType: 'noBall', extraRuns: 1 }),
+    ]
+    const state = restoreStateFromBalls(balls)
+    expect(state.bowlerIdx).toBe(0) // not a legal ball
+  })
+
+  it('handles two complete overs correctly', () => {
+    // Over 1: 6 dots, Over 2: 6 dots
+    const balls = Array.from({ length: 12 }, () => makeBall({ runs: 0 }))
+    const state = restoreStateFromBalls(balls)
+    expect(state.bowlerIdx).toBe(2) // two bowler changes
+    // Two end-of-over swaps cancel out
+    expect(state.striker).toBe(0)
+    expect(state.nonStriker).toBe(1)
+  })
+
+  it('handles mixed scenario: runs + wicket + over end', () => {
+    const balls = [
+      makeBall({ runs: 1 }),                                                    // swap: s=1, ns=0
+      makeBall({ runs: 4 }),                                                    // no swap
+      makeBall({ runs: 0, isWicket: true, dismissalType: 'bowled' }),           // new bat s=2, ns=0
+      makeBall({ runs: 2 }),                                                    // no swap
+      makeBall({ runs: 0 }),                                                    // no swap
+      makeBall({ runs: 1 }),                                                    // swap: s=0, ns=2, then end-of-over swap back: s=2, ns=0
+    ]
+    const state = restoreStateFromBalls(balls)
+    expect(state.bowlerIdx).toBe(1) // end of first over
+  })
+
+  it('handles wicket with runs (run out)', () => {
+    const balls = [
+      makeBall({ runs: 2, isWicket: true, dismissalType: 'run out' }),
+    ]
+    const state = restoreStateFromBalls(balls)
+    // Wicket: new batsman at striker. runs=2 (even) so no mid-ball swap before wicket check
+    // But the code does swap first for odd, then wicket. 2 is even, no swap.
+    // Wicket: s = max(0,1)+1 = 2
+    expect(state.striker).toBe(2)
+    expect(state.nonStriker).toBe(1)
+  })
+
+  it('restores correctly after 1.3 overs (9 legal balls)', () => {
+    // Simulating: 1 over (6 balls) + 3 more balls
+    const balls = [
+      ...Array.from({ length: 6 }, () => makeBall({ runs: 0 })), // over 1 done
+      makeBall({ runs: 1 }), // ball 7: swap
+      makeBall({ runs: 0 }), // ball 8
+      makeBall({ runs: 0 }), // ball 9
+    ]
+    const state = restoreStateFromBalls(balls)
+    expect(state.bowlerIdx).toBe(1) // 1 over completed = 1 bowler change
   })
 })
