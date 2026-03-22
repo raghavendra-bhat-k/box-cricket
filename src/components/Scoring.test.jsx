@@ -1011,3 +1011,80 @@ describe('Scoring - per-team sizes', () => {
     })
   })
 })
+
+// ─── Defect fixes: undo/edit restore state, odd-runs end-of-over ───
+
+describe('Scoring - undo restores striker/bowler state', () => {
+  it('undo after single run restores original striker', async () => {
+    const id = await createTestMatch()
+    renderScoring(id)
+
+    // Wait for render, tap 1 run (causes strike rotation)
+    await waitFor(() => screen.getByText('W'))
+    fireEvent.click(screen.getByText('1'))
+
+    // After 1 run: striker should have swapped (Bob* now)
+    await waitFor(() => {
+      expect(screen.getByText('*Bob')).toBeInTheDocument()
+    })
+
+    // Undo the ball
+    fireEvent.click(screen.getByText('Undo'))
+
+    // After undo: should be back to Alice* as striker
+    await waitFor(() => {
+      expect(screen.getByText('*Alice')).toBeInTheDocument()
+    })
+  })
+
+  it('undo after completing an over restores bowler', async () => {
+    const id = await createTestMatch()
+    // Pre-load 6 dot balls (completes an over)
+    for (let i = 0; i < 6; i++) {
+      await addBall({ matchId: id, innings: 1, batsmanIndex: 0, bowlerIndex: 0, runs: 0, isExtra: false, isWicket: false })
+    }
+    renderScoring(id)
+
+    await waitFor(() => {
+      // After 1 complete over, bowler should be Helen (index 1)
+      expect(screen.getByText(/Helen/)).toBeInTheDocument()
+    })
+
+    // Undo the 6th ball
+    fireEvent.click(screen.getByText('Undo'))
+    await waitFor(() => {
+      // Bowler should be back to George (index 0)
+      expect(screen.getByText(/George/)).toBeInTheDocument()
+    })
+  })
+})
+
+describe('Scoring - no-ball credits batsman runs', () => {
+  it('no-ball with runs shows correct total in scorebar', async () => {
+    const id = await createTestMatch()
+    // Add a no-ball where batsman hit 3 + 1 penalty = 4 total
+    await addBall({
+      matchId: id, innings: 1, batsmanIndex: 0, bowlerIndex: 0,
+      runs: 3, isExtra: true, extraType: 'noBall', extraRuns: 1, isWicket: false,
+    })
+    renderScoring(id)
+    await waitFor(() => {
+      // Total should be 4 (3 bat + 1 penalty)
+      expect(screen.getByText(/4\/0/)).toBeInTheDocument()
+    })
+  })
+})
+
+describe('Scoring - wicket display shows runs', () => {
+  it('wicket with runs displays W+runs in over view', async () => {
+    const id = await createTestMatch()
+    await addBall({
+      matchId: id, innings: 1, batsmanIndex: 0, bowlerIndex: 0,
+      runs: 2, isExtra: false, isWicket: true, dismissalType: 'run out',
+    })
+    renderScoring(id)
+    await waitFor(() => {
+      expect(screen.getByText('W2')).toBeInTheDocument()
+    })
+  })
+})

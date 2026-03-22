@@ -122,32 +122,34 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
 
     await addBall(ball)
 
-    // Use swapRuns (original tap value) for strike rotation, not mapped runs
+    // Compute new positions with local variables to avoid stale closure bugs
+    let newStriker = striker
+    let newNonStriker = nonStriker
+    let newBowlerIdx = bowlerIdx
+
     const runsForSwap = swapRuns !== undefined ? swapRuns : runs
     const totalSwapRuns = runsForSwap + er
+
     if (!isWicket && totalSwapRuns % 2 === 1) {
-      setStriker(nonStriker)
-      setNonStriker(striker)
+      ;[newStriker, newNonStriker] = [newNonStriker, newStriker]
     }
 
     if (isWicket) {
-      const nextBatsman = Math.max(striker, nonStriker) + 1
-      setStriker(nextBatsman)
+      newStriker = Math.max(newStriker, newNonStriker) + 1
     }
 
-    const newLegalBalls = score.legalBalls + ((!isExtra || (et !== 'wide' && et !== 'noBall')) ? 1 : 0)
-    if (newLegalBalls > 0 && newLegalBalls % 6 === 0 && newLegalBalls !== score.legalBalls) {
-      if (!isWicket && totalSwapRuns % 2 === 1) {
-        setStriker(s => {
-          setNonStriker(s)
-          return nonStriker
-        })
-      } else if (!isWicket) {
-        setStriker(nonStriker)
-        setNonStriker(striker)
+    const isLegal = !isExtra || (et !== 'wide' && et !== 'noBall')
+    const newLegalBalls = score.legalBalls + (isLegal ? 1 : 0)
+    if (newLegalBalls > 0 && newLegalBalls % 6 === 0 && isLegal) {
+      if (!isWicket) {
+        ;[newStriker, newNonStriker] = [newNonStriker, newStriker]
       }
-      setBowlerIdx(prev => prev + 1)
+      newBowlerIdx++
     }
+
+    setStriker(newStriker)
+    setNonStriker(newNonStriker)
+    setBowlerIdx(newBowlerIdx)
 
     const updatedBalls = await getBalls(matchId, innings)
     setBalls(updatedBalls)
@@ -192,6 +194,20 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
     if (removed) {
       const updatedBalls = await getBalls(matchId, innings)
       setBalls(updatedBalls)
+      recalculateState(updatedBalls)
+    }
+  }
+
+  function recalculateState(updatedBalls) {
+    if (updatedBalls.length > 0) {
+      const restored = restoreStateFromBalls(updatedBalls)
+      setStriker(restored.striker)
+      setNonStriker(restored.nonStriker)
+      setBowlerIdx(restored.bowlerIdx)
+    } else {
+      setStriker(0)
+      setNonStriker(1)
+      setBowlerIdx(0)
     }
   }
 
@@ -233,11 +249,13 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
 
   function handleExtraConfirm() {
     const isLegalDelivery = extraType === 'bye' || extraType === 'legBye'
+    const isNoBall = extraType === 'noBall'
     recordBall({
-      runs: isLegalDelivery ? extraRuns : 0,
+      // No-ball: batsman gets runs minus 1 penalty; wide: all extras; bye/legBye: all to runs (not credited to batsman in calculateScore)
+      runs: isNoBall ? Math.max(0, extraRuns - 1) : (isLegalDelivery ? extraRuns : 0),
       isExtra: true,
       extraType,
-      extraRuns: isLegalDelivery ? 0 : extraRuns,
+      extraRuns: isNoBall ? 1 : (isLegalDelivery ? 0 : extraRuns),
     })
     setSheet(null)
     setExtraType(null)
@@ -259,6 +277,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
     await updateBall(id, changes)
     const updatedBalls = await getBalls(matchId, innings)
     setBalls(updatedBalls)
+    recalculateState(updatedBalls)
     setEditingBall(null)
     setSheet(null)
   }
