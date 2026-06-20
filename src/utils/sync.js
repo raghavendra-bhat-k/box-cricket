@@ -193,16 +193,7 @@ export function makeSyncFile(payload) {
   return new File([json], name, { type: 'application/json' });
 }
 
-export async function shareOrDownloadPayload(payload) {
-  const file = makeSyncFile(payload);
-  if (navigator.canShare?.({ files: [file] }) && navigator.share) {
-    await navigator.share({
-      title: 'Box Cricket sync file',
-      text: 'Import this file in Box Cricket to continue scoring.',
-      files: [file],
-    });
-    return 'shared';
-  }
+function downloadFile(file) {
   const url = URL.createObjectURL(file);
   const link = document.createElement('a');
   link.href = url;
@@ -211,6 +202,25 @@ export async function shareOrDownloadPayload(payload) {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+export async function shareOrDownloadPayload(payload) {
+  const file = makeSyncFile(payload);
+  if (navigator.canShare?.({ files: [file] }) && navigator.share) {
+    try {
+      await navigator.share({
+        title: 'Box Cricket sync file',
+        text: 'Import this file in Box Cricket to continue scoring.',
+        files: [file],
+      });
+      return 'shared';
+    } catch (err) {
+      if (err?.name === 'AbortError') return 'cancelled';
+      downloadFile(file);
+      return 'downloaded';
+    }
+  }
+  downloadFile(file);
   return 'downloaded';
 }
 

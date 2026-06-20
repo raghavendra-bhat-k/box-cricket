@@ -247,4 +247,48 @@ describe('JSON sync utilities', () => {
     URL.createObjectURL = originalCreate
     URL.revokeObjectURL = originalRevoke
   })
+
+  it('falls back to download when native sharing is denied', async () => {
+    const id = await createScoredMatch()
+    const payload = await exportMatchPayload(id)
+    const originalCanShare = navigator.canShare
+    const originalShare = navigator.share
+    const originalCreate = URL.createObjectURL
+    const originalRevoke = URL.revokeObjectURL
+    navigator.canShare = () => true
+    navigator.share = vi.fn().mockRejectedValue(Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' }))
+    URL.createObjectURL = vi.fn(() => 'blob:sync-denied')
+    URL.revokeObjectURL = vi.fn()
+    const click = vi.fn()
+    const originalCreateElement = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation(tag => {
+      const el = originalCreateElement(tag)
+      if (tag === 'a') el.click = click
+      return el
+    })
+
+    await expect(shareOrDownloadPayload(payload)).resolves.toBe('downloaded')
+    expect(navigator.share).toHaveBeenCalled()
+    expect(click).toHaveBeenCalled()
+
+    document.createElement.mockRestore()
+    navigator.canShare = originalCanShare
+    navigator.share = originalShare
+    URL.createObjectURL = originalCreate
+    URL.revokeObjectURL = originalRevoke
+  })
+
+  it('does not download when native sharing is cancelled', async () => {
+    const id = await createScoredMatch()
+    const payload = await exportMatchPayload(id)
+    const originalCanShare = navigator.canShare
+    const originalShare = navigator.share
+    navigator.canShare = () => true
+    navigator.share = vi.fn().mockRejectedValue(Object.assign(new Error('Share cancelled'), { name: 'AbortError' }))
+
+    await expect(shareOrDownloadPayload(payload)).resolves.toBe('cancelled')
+
+    navigator.canShare = originalCanShare
+    navigator.share = originalShare
+  })
 })
