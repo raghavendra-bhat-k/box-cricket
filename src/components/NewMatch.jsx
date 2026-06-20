@@ -14,6 +14,7 @@ export default function NewMatch({ onBack, onStart, rematchFrom }) {
   const prev = rematchFrom
   const [teamA, setTeamA] = useState(prev?.teamA?.name || '')
   const [teamB, setTeamB] = useState(prev?.teamB?.name || '')
+  const [tournamentName, setTournamentName] = useState(prev?.tournamentName || '')
   const [totalOvers, setTotalOvers] = useState(prev?.totalOvers || 6)
   const [playersPerSide, setPlayersPerSide] = useState(prev?.playersPerSide || 6)
   const [showPlayers, setShowPlayers] = useState(!!(prev?.teamA?.players?.length || prev?.teamB?.players?.length))
@@ -69,6 +70,7 @@ export default function NewMatch({ onBack, onStart, rematchFrom }) {
       teamB: teamB.trim(),
       totalOvers,
       playersPerSide,
+      tournamentName,
       teamAPlayers: teamAPlayers.map(p => p.trim()).filter(Boolean),
       teamBPlayers: teamBPlayers.map(p => p.trim()).filter(Boolean),
       rules,
@@ -101,6 +103,16 @@ export default function NewMatch({ onBack, onStart, rematchFrom }) {
           value={teamB}
           onChange={e => setTeamB(e.target.value)}
           placeholder="Team name"
+        />
+      </div>
+
+      <div className="form-group">
+        <label>Tournament / Day Label (Optional)</label>
+        <input
+          type="text"
+          value={tournamentName}
+          onChange={e => setTournamentName(e.target.value)}
+          placeholder="e.g. Summer Cup"
         />
       </div>
 

@@ -410,6 +410,79 @@ body {
 .match-actions {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.import-btn {
+  display: block;
+  width: 100%;
+  text-align: center;
+  margin-top: 10px;
+}
+
+.export-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.sync-error,
+.sync-warning {
+  background: #ffebee;
+  color: var(--red);
+  border-radius: var(--radius);
+  padding: 10px;
+  font-size: 13px;
+  margin-top: 10px;
+}
+
+.sync-meta {
+  color: var(--text-light);
+  font-size: 13px;
+  margin-bottom: 5px;
+}
+
+.import-sheet {
+  max-height: 82dvh;
+  overflow-y: auto;
+}
+
+.import-match-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.import-match-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.import-match-row div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+}
+
+.import-match-row select {
+  align-self: flex-start;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card-bg);
+}
+
+.sync-warning-text {
+  color: var(--orange);
+  font-weight: 700;
 }
 
 /* Innings break */
@@ -585,4 +658,3 @@ body {
   font-size: 15px;
   font-weight: 500;
 }
-

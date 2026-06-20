@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { getMatch, getBalls } from '../db'
 import { calculateScore, formatOvers } from '../utils/scoring'
 
-export default function Scorecard({ matchId, onBack, onResume }) {
+export default function Scorecard({ matchId, onBack, onResume, onShareSync }) {
   const [match, setMatch] = useState(null)
   const [innings1, setInnings1] = useState(null)
   const [innings2, setInnings2] = useState(null)
@@ -190,6 +190,9 @@ export default function Scorecard({ matchId, onBack, onResume }) {
           Copy / Share
         </button>
       </div>
+      <button className="btn btn-secondary" style={{ width: '100%', marginTop: 8 }} onClick={() => onShareSync?.()}>
+        Share Match Sync File
+      </button>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
         {match.status === 'live' && (

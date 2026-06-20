@@ -180,7 +180,7 @@ describe('calculateScore', () => {
   })
 
   it('calculates overs and ballsInOver', () => {
-    const balls = Array.from({ length: 8 }, (_, i) => makeBall({ runs: 1 }))
+    const balls = Array.from({ length: 8 }, () => makeBall({ runs: 1 }))
     const s = calculateScore(balls)
     expect(s.overs).toBe(1)
     expect(s.ballsInOver).toBe(2)

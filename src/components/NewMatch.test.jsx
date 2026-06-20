@@ -38,6 +38,21 @@ describe('NewMatch - form basics', () => {
     })
   })
 
+  it('stores optional tournament name', async () => {
+    render(<NewMatch onBack={onBack} onStart={onStart} />)
+    const inputs = screen.getAllByPlaceholderText('Team name')
+    fireEvent.change(inputs[0], { target: { value: 'Team X' } })
+    fireEvent.change(inputs[1], { target: { value: 'Team Y' } })
+    fireEvent.change(screen.getByPlaceholderText('e.g. Summer Cup'), { target: { value: 'Summer Cup' } })
+    fireEvent.click(screen.getByText('Start Match'))
+
+    await waitFor(() => {
+      expect(onStart).toHaveBeenCalledWith(expect.any(Number))
+    })
+    const match = await db.matches.get(onStart.mock.calls[0][0])
+    expect(match.tournamentName).toBe('Summer Cup')
+  })
+
   it('toggle player names shows and hides inputs', () => {
     render(<NewMatch onBack={onBack} onStart={onStart} />)
     fireEvent.click(screen.getByText('Add Player Names (Optional)'))
@@ -143,5 +158,18 @@ describe('NewMatch - rematch pre-fill', () => {
 
     // Rules section should be visible
     expect(screen.getByText('Hide Custom Rules')).toBeInTheDocument()
+  })
+
+  it('pre-fills tournament name from rematch', () => {
+    const rematch = {
+      teamA: { name: 'A', players: [] },
+      teamB: { name: 'B', players: [] },
+      totalOvers: 6,
+      playersPerSide: 6,
+      tournamentName: 'Night League',
+    }
+    render(<NewMatch onBack={onBack} onStart={onStart} rematchFrom={rematch} />)
+
+    expect(screen.getByDisplayValue('Night League')).toBeInTheDocument()
   })
 })

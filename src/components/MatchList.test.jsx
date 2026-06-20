@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import MatchList from './MatchList'
 import db from '../db'
 
 const onResume = vi.fn()
 const onView = vi.fn()
 const onRematch = vi.fn()
+const onExportMatch = vi.fn()
+const onExportDay = vi.fn()
+const onExportTournament = vi.fn()
 
 beforeEach(async () => {
   await db.balls.clear()
@@ -13,6 +16,9 @@ beforeEach(async () => {
   onResume.mockClear()
   onView.mockClear()
   onRematch.mockClear()
+  onExportMatch.mockClear()
+  onExportDay.mockClear()
+  onExportTournament.mockClear()
 })
 
 describe('MatchList - rematch button', () => {
@@ -72,5 +78,42 @@ describe('MatchList - rematch button', () => {
     await waitFor(() => {
       expect(screen.getByText('Resume')).toBeInTheDocument()
     })
+  })
+})
+
+describe('MatchList - sync export buttons', () => {
+  it('shows match, day, and tournament export actions', async () => {
+    const id = await db.matches.add({
+      date: new Date().toISOString(),
+      dayKey: '2026-06-20',
+      status: 'live',
+      teamA: { name: 'Sync A', players: [] },
+      teamB: { name: 'Sync B', players: [] },
+      totalOvers: 6,
+      playersPerSide: 6,
+      currentInnings: 1,
+      result: null,
+      tournamentName: 'Summer Cup',
+    })
+
+    render(
+      <MatchList
+        onResume={onResume}
+        onView={onView}
+        onRematch={onRematch}
+        onExportMatch={onExportMatch}
+        onExportDay={onExportDay}
+        onExportTournament={onExportTournament}
+      />
+    )
+
+    await waitFor(() => screen.getByText('Sync A vs Sync B'))
+    fireEvent.click(screen.getByText('Export 2026-06-20'))
+    fireEvent.click(screen.getByText('Export Summer Cup'))
+    fireEvent.click(screen.getByText('Export'))
+
+    expect(onExportDay).toHaveBeenCalledWith('2026-06-20')
+    expect(onExportTournament).toHaveBeenCalledWith('Summer Cup')
+    expect(onExportMatch).toHaveBeenCalledWith(id)
   })
 })

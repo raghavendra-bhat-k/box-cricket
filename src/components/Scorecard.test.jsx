@@ -5,12 +5,14 @@ import db, { createMatch, addBall } from '../db'
 
 const onBack = vi.fn()
 const onResume = vi.fn()
+const onShareSync = vi.fn()
 
 beforeEach(async () => {
   await db.balls.clear()
   await db.matches.clear()
   onBack.mockClear()
   onResume.mockClear()
+  onShareSync.mockClear()
 })
 
 async function setupMatch(overrides = {}) {
@@ -33,13 +35,21 @@ async function setupMatch(overrides = {}) {
 describe('Scorecard', () => {
   it('renders scorecard with team name and score', async () => {
     const id = await setupMatch()
-    render(<Scorecard matchId={id} onBack={onBack} onResume={onResume} />)
+    render(<Scorecard matchId={id} onBack={onBack} onResume={onResume} onShareSync={onShareSync} />)
 
     await waitFor(() => {
       expect(screen.getByText('Scorecard')).toBeInTheDocument()
       expect(screen.getByText(/Tigers/)).toBeInTheDocument()
       expect(screen.getByText(/10\/1/)).toBeInTheDocument() // 4+6 = 10 runs, 1 wicket
     })
+  })
+
+  it('calls onShareSync when sync file share is clicked', async () => {
+    const id = await setupMatch()
+    render(<Scorecard matchId={id} onBack={onBack} onResume={onResume} onShareSync={onShareSync} />)
+    await waitFor(() => screen.getByText('Share Match Sync File'))
+    fireEvent.click(screen.getByText('Share Match Sync File'))
+    expect(onShareSync).toHaveBeenCalled()
   })
 
   it('shows batsman table with correct data', async () => {

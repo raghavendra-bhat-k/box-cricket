@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import Scoring from './Scoring'
-import db, { createMatch, addBall, getBalls, updateMatch } from '../db'
+import db, { createMatch, addBall, getBalls } from '../db'
 
 const onBack = vi.fn()
 const onViewScorecard = vi.fn()
+const onShareSync = vi.fn()
 
 async function createTestMatch(overrides = {}) {
   return createMatch({
@@ -23,11 +24,12 @@ beforeEach(async () => {
   await db.matches.clear()
   onBack.mockClear()
   onViewScorecard.mockClear()
+  onShareSync.mockClear()
 })
 
 function renderScoring(matchId) {
   return render(
-    <Scoring matchId={matchId} onBack={onBack} onViewScorecard={onViewScorecard} />
+    <Scoring matchId={matchId} onBack={onBack} onViewScorecard={onViewScorecard} onShareSync={onShareSync} />
   )
 }
 
@@ -64,6 +66,18 @@ describe('Scoring - basic rendering', () => {
       expect(screen.getByText(/Bob/)).toBeInTheDocument()
       expect(screen.getByText(/George/)).toBeInTheDocument()
     })
+  })
+
+  it('calls onShareSync from the match options menu', async () => {
+    const id = await createTestMatch()
+    renderScoring(id)
+    await waitFor(() => screen.getByLabelText('Menu'))
+
+    fireEvent.click(screen.getByLabelText('Menu'))
+    await waitFor(() => screen.getByText('Share Match Sync File'))
+    fireEvent.click(screen.getByText('Share Match Sync File'))
+
+    expect(onShareSync).toHaveBeenCalled()
   })
 })
 

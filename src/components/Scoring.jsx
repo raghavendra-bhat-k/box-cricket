@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
-import db, { getMatch, updateMatch, getBalls, addBall, removeLastBall, updateBall } from '../db'
+import { getMatch, updateMatch, getBalls, addBall, removeLastBall, updateBall } from '../db'
 import { calculateScore, getCurrentOver, ballDisplay, formatOvers, restoreStateFromBalls } from '../utils/scoring'
 import MiniScorebar from './MiniScorebar'
 
-export default function Scoring({ matchId, onBack, onViewScorecard }) {
+export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync }) {
   const [match, setMatch] = useState(null)
   const [balls, setBalls] = useState([])
   const [innings, setInnings] = useState(1)
@@ -66,6 +66,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
     }
   }, [matchId])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadData() }, [loadData])
 
   if (!match) return <div className="container">Loading...</div>
@@ -597,6 +598,9 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
               </button>
               <button className="menu-item" onClick={() => { setSheet(null); onViewScorecard() }}>
                 View Scorecard
+              </button>
+              <button className="menu-item" onClick={() => { setSheet(null); onShareSync?.() }}>
+                Share Match Sync File
               </button>
               <button className="menu-item" onClick={() => { setSheet(null); onBack() }}>
                 Home
