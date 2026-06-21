@@ -143,3 +143,24 @@ export async function getBallById(ballId) {
 export async function deleteBallsForMatch(matchId) {
   return db.balls.where({ matchId }).delete();
 }
+
+export async function deleteMatch(matchId) {
+  await deleteBallsForMatch(matchId);
+  return db.matches.delete(matchId);
+}
+
+export async function deleteMatchesByDay(dayKey) {
+  const matches = (await getAllMatches()).filter(match => (match.dayKey || getDayKey(match.date)) === dayKey);
+  for (const match of matches) {
+    await deleteMatch(match.id);
+  }
+  return matches.length;
+}
+
+export async function deleteMatchesByTournament(tournamentName) {
+  const matches = (await getAllMatches()).filter(match => match.tournamentName === tournamentName);
+  for (const match of matches) {
+    await deleteMatch(match.id);
+  }
+  return matches.length;
+}

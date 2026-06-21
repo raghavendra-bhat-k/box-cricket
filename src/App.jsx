@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { getAllMatches } from './db'
+import { useEffect, useState } from 'react'
+import { deleteMatch, deleteMatchesByDay, deleteMatchesByTournament, getAllMatches } from './db'
 import MatchList from './components/MatchList'
 import NewMatch from './components/NewMatch'
 import Scoring from './components/Scoring'
@@ -15,6 +15,13 @@ import {
 } from './utils/sync'
 
 export default function App() {
+  const [theme, setTheme] = useState(() => {
+    try {
+      return typeof localStorage?.getItem === 'function' ? localStorage.getItem('boxCricketTheme') || 'royal' : 'royal'
+    } catch {
+      return 'royal'
+    }
+  })
   const [screen, setScreen] = useState('home')
   const [matchId, setMatchId] = useState(null)
   const [rematchFrom, setRematchFrom] = useState(null)
@@ -22,6 +29,15 @@ export default function App() {
   const [importState, setImportState] = useState(null)
   const [importError, setImportError] = useState('')
   const [importChoices, setImportChoices] = useState({})
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    try {
+      if (typeof localStorage?.setItem === 'function') localStorage.setItem('boxCricketTheme', theme)
+    } catch {
+      // Theme choice is cosmetic; ignore storage failures.
+    }
+  }, [theme])
 
   function goHome() {
     setScreen('home')
@@ -107,14 +123,21 @@ export default function App() {
 
   return (
     <div className="container">
-      <h1 className="app-title">Box Cricket</h1>
+      <div className="home-header">
+        <h1 className="app-title">Box Cricket</h1>
+        <div className="theme-picker">
+          <label htmlFor="theme-select">Palette</label>
+          <select id="theme-select" value={theme} onChange={e => setTheme(e.target.value)}>
+            <option value="royal">Red & Gold</option>
+            <option value="classic">Classic Green</option>
+            <option value="sky">Sky Blue</option>
+            <option value="sunset">Sunset</option>
+          </select>
+        </div>
+      </div>
       <button className="btn btn-primary btn-large" onClick={() => setScreen('new')}>
         New Match
       </button>
-      <label className="btn btn-secondary import-btn">
-        Import Sync File
-        <input type="file" accept=".json,.boxcricket.json,application/json" onChange={handleImportFile} hidden />
-      </label>
       {importError && <div className="sync-error">{importError}</div>}
       <MatchList
         key={refreshKey}
@@ -124,6 +147,19 @@ export default function App() {
         onExportMatch={id => sharePayload(exportMatchPayload(id))}
         onExportDay={dayKey => sharePayload(exportDayPayload(dayKey))}
         onExportTournament={name => sharePayload(exportTournamentPayload(name))}
+        onImportFile={handleImportFile}
+        onDeleteMatch={async id => {
+          await deleteMatch(id)
+          setRefreshKey(k => k + 1)
+        }}
+        onDeleteDay={async dayKey => {
+          await deleteMatchesByDay(dayKey)
+          setRefreshKey(k => k + 1)
+        }}
+        onDeleteTournament={async name => {
+          await deleteMatchesByTournament(name)
+          setRefreshKey(k => k + 1)
+        }}
       />
       {importState && (
         <div className="bottom-sheet-overlay" onClick={() => setImportState(null)}>

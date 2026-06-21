@@ -16,6 +16,18 @@ describe('App - navigation', () => {
     expect(screen.getByText('New Match')).toBeInTheDocument()
   })
 
+  it('defaults to red and gold palette and allows changing palettes', async () => {
+    render(<App />)
+    const palette = screen.getByLabelText('Palette')
+    expect(palette.value).toBe('royal')
+
+    fireEvent.change(palette, { target: { value: 'sky' } })
+
+    await waitFor(() => {
+      expect(document.documentElement.dataset.theme).toBe('sky')
+    })
+  })
+
   it('navigates to new match screen', () => {
     render(<App />)
     fireEvent.click(screen.getByText('New Match'))
