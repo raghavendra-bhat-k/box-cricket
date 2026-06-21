@@ -4,6 +4,7 @@ import MatchList from './components/MatchList'
 import NewMatch from './components/NewMatch'
 import Scoring from './components/Scoring'
 import Scorecard from './components/Scorecard'
+import Icon from './components/Icon'
 import {
   applySyncImport,
   exportDayPayload,
@@ -136,7 +137,7 @@ export default function App() {
         </div>
       </div>
       <button className="btn btn-primary btn-large" onClick={() => setScreen('new')}>
-        New Match
+        <Icon name="plus" /> New Match
       </button>
       {importError && <div className="sync-error">{importError}</div>}
       <MatchList

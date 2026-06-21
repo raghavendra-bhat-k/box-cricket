@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { getMatch, updateMatch, getBalls, addBall, removeLastBall, updateBall } from '../db'
 import { calculateScore, getCurrentOver, ballDisplay, formatOvers, restoreStateFromBalls } from '../utils/scoring'
 import MiniScorebar from './MiniScorebar'
+import BallLog from './BallLog'
+import Icon from './Icon'
 
 export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync }) {
   const [match, setMatch] = useState(null)
@@ -28,6 +30,12 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
   const [teamSizesInput, setTeamSizesInput] = useState({ teamASize: 0, teamBSize: 0 })
   const [oversInput, setOversInput] = useState(0)
   const [removePlayerTeam, setRemovePlayerTeam] = useState('A')
+  const [allInningsBalls, setAllInningsBalls] = useState({ 1: [], 2: [] })
+
+  function updateBallsState(inningsNumber, updatedBalls) {
+    setAllInningsBalls(prev => ({ ...prev, [inningsNumber]: updatedBalls }))
+    if (inningsNumber === innings) setBalls(updatedBalls)
+  }
 
   const loadData = useCallback(async () => {
     const m = await getMatch(matchId)
@@ -37,6 +45,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
     setInnings(currentInnings)
     const b = await getBalls(matchId, currentInnings)
     setBalls(b)
+    setAllInningsBalls(prev => ({ ...prev, [currentInnings]: b }))
 
     // Restore player positions from ball history
     if (b.length > 0) {
@@ -48,6 +57,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
 
     if (currentInnings === 2) {
       const firstBalls = await getBalls(matchId, 1)
+      setAllInningsBalls(prev => ({ ...prev, 1: firstBalls }))
       const firstScore = calculateScore(firstBalls)
       setFirstInningsScore(firstScore.runs)
     }
@@ -153,7 +163,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
     setBowlerIdx(newBowlerIdx)
 
     const updatedBalls = await getBalls(matchId, innings)
-    setBalls(updatedBalls)
+    updateBallsState(innings, updatedBalls)
 
     const newScore = calculateScore(updatedBalls)
     const newBattingCount = battingPlayerCount
@@ -194,7 +204,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
     const removed = await removeLastBall(matchId, innings)
     if (removed) {
       const updatedBalls = await getBalls(matchId, innings)
-      setBalls(updatedBalls)
+      updateBallsState(innings, updatedBalls)
       recalculateState(updatedBalls)
     }
   }
@@ -226,6 +236,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
     setShowInningsBreak(false)
     const b = await getBalls(matchId, 2)
     setBalls(b)
+    setAllInningsBalls(prev => ({ ...prev, 2: b }))
     setMatch(prev => ({ ...prev, currentInnings: 2 }))
   }
 
@@ -277,7 +288,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
     const { id, ...changes } = editingBall
     await updateBall(id, changes)
     const updatedBalls = await getBalls(matchId, innings)
-    setBalls(updatedBalls)
+    updateBallsState(innings, updatedBalls)
     recalculateState(updatedBalls)
     setEditingBall(null)
     setSheet(null)
@@ -390,6 +401,18 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
         <button className="btn btn-secondary" style={{ marginTop: 10, width: '100%' }} onClick={onViewScorecard}>
           View Scorecard
         </button>
+        <button className="btn btn-secondary" style={{ marginTop: 10, width: '100%' }} onClick={() => setSheet('ballLog')}>
+          <Icon name="list" /> Ball by Ball
+        </button>
+        {sheet === 'ballLog' && (
+          <div className="bottom-sheet-overlay" onClick={() => setSheet(null)}>
+            <div className="bottom-sheet import-sheet" onClick={e => e.stopPropagation()}>
+              <h3>Ball by Ball</h3>
+              <BallLog match={match} inningsBalls={{ ...allInningsBalls, [innings]: balls }} />
+              <button className="sheet-cancel" onClick={() => setSheet(null)}>Close</button>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -598,6 +621,9 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
               </button>
               <button className="menu-item" onClick={() => { setSheet(null); onViewScorecard() }}>
                 View Scorecard
+              </button>
+              <button className="menu-item" onClick={() => setSheet('ballLog')}>
+                Ball by Ball
               </button>
               <button className="menu-item" onClick={() => { setSheet(null); onShareSync?.() }}>
                 Share Match Sync File
@@ -868,6 +894,16 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
               )}
             </div>
             <button className="sheet-cancel" onClick={() => setSheet('menu')}>Back</button>
+          </div>
+        </div>
+      )}
+
+      {sheet === 'ballLog' && (
+        <div className="bottom-sheet-overlay" onClick={() => setSheet(null)}>
+          <div className="bottom-sheet import-sheet" onClick={e => e.stopPropagation()}>
+            <h3>Ball by Ball</h3>
+            <BallLog match={match} inningsBalls={{ ...allInningsBalls, [innings]: balls }} />
+            <button className="sheet-cancel" onClick={() => setSheet(null)}>Close</button>
           </div>
         </div>
       )}

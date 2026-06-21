@@ -79,6 +79,25 @@ describe('Scoring - basic rendering', () => {
 
     expect(onShareSync).toHaveBeenCalled()
   })
+
+  it('opens ball by ball score from the match options menu', async () => {
+    const id = await createTestMatch()
+    await addBall({
+      matchId: id, innings: 1, over: 0, ballInOver: 0,
+      runs: 4, isExtra: false, extraType: null, extraRuns: 0,
+      isWicket: false, dismissalType: null, batsmanIndex: 0, bowlerIndex: 0,
+    })
+    renderScoring(id)
+    await waitFor(() => screen.getByLabelText('Menu'))
+
+    fireEvent.click(screen.getByLabelText('Menu'))
+    await waitFor(() => screen.getByText('Ball by Ball'))
+    fireEvent.click(screen.getByText('Ball by Ball'))
+
+    expect(screen.getByText('Team A innings')).toBeInTheDocument()
+    expect(screen.getByText('0.1')).toBeInTheDocument()
+    expect(screen.getByText('4/0')).toBeInTheDocument()
+  })
 })
 
 // ─── Wicket with runs ───────────────────────────────────────────

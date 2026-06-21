@@ -52,6 +52,19 @@ describe('Scorecard', () => {
     expect(onShareSync).toHaveBeenCalled()
   })
 
+  it('toggles ball by ball score', async () => {
+    const id = await setupMatch()
+    render(<Scorecard matchId={id} onBack={onBack} onResume={onResume} onShareSync={onShareSync} />)
+    await waitFor(() => screen.getByText('Ball by Ball'))
+
+    fireEvent.click(screen.getByText('Ball by Ball'))
+
+    expect(screen.getByText('Tigers innings')).toBeInTheDocument()
+    expect(screen.getByText('0.1')).toBeInTheDocument()
+    expect(screen.getByText('10/0')).toBeInTheDocument()
+    expect(screen.getByText('10/1')).toBeInTheDocument()
+  })
+
   it('shows batsman table with correct data', async () => {
     const id = await setupMatch()
     render(<Scorecard matchId={id} onBack={onBack} onResume={onResume} />)

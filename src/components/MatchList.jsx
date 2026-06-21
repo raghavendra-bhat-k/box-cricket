@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getAllMatches, getDayKey } from '../db'
+import Icon from './Icon'
 
 function isToday(dateStr) {
   const d = new Date(dateStr)
@@ -92,7 +93,7 @@ export default function MatchList({
       <div className="empty-library">
         <p>No matches yet</p>
         <label className="btn btn-secondary import-btn">
-          Import Sync File
+          <Icon name="upload" /> Import Sync File
           <input type="file" accept=".json,.boxcricket.json,application/json" onChange={onImportFile} hidden />
         </label>
       </div>
@@ -122,17 +123,17 @@ export default function MatchList({
               </button>
               <div className="group-actions">
                 <label className="btn btn-small btn-secondary">
-                  Import
+                  <Icon name="upload" /> Import
                   <input type="file" accept=".json,.boxcricket.json,application/json" onChange={onImportFile} hidden />
                 </label>
                 <button
                   className="btn btn-small btn-secondary"
                   onClick={() => group.type === 'tournament' ? onExportTournament?.(group.exportValue) : onExportDay?.(group.exportValue)}
                 >
-                  Export
+                  <Icon name="download" /> Export
                 </button>
                 <button className="btn btn-small btn-danger" onClick={() => handleDeleteGroup(group)}>
-                  Delete
+                  <Icon name="trash" /> Delete
                 </button>
               </div>
             </div>
@@ -152,22 +153,22 @@ export default function MatchList({
                     <div className="match-actions">
                       {m.status === 'live' && (
                         <button className="btn btn-small btn-primary" onClick={() => onResume(m.id)}>
-                          Resume
+                          <Icon name="play" /> Resume
                         </button>
                       )}
                       {isToday(m.date) && (
                         <button className="btn btn-small btn-secondary" onClick={() => onRematch(m)}>
-                          Rematch
+                          <Icon name="refresh" /> Rematch
                         </button>
                       )}
                       <button className="btn btn-small btn-secondary" onClick={() => onView(m.id)}>
-                        View
+                        <Icon name="eye" /> View
                       </button>
                       <button className="btn btn-small btn-secondary" onClick={() => onExportMatch?.(m.id)}>
-                        Export
+                        <Icon name="download" /> Export
                       </button>
                       <button className="btn btn-small btn-danger" onClick={() => handleDeleteMatch(m)}>
-                        Delete
+                        <Icon name="trash" /> Delete
                       </button>
                     </div>
                   </div>
