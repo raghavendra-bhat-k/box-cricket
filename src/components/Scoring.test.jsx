@@ -907,7 +907,7 @@ describe('Scoring - remove player action', () => {
     fireEvent.click(screen.getByText('Team B'))
 
     await waitFor(() => {
-      expect(screen.getByText('George')).toBeInTheDocument()
+      expect(screen.getAllByText('George').length).toBeGreaterThan(0)
     })
   })
 })

@@ -664,6 +664,35 @@ body {
   border-radius: 20px;
   margin-bottom: 14px;
 }
+.bowler-change-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card-bg);
+  border: 2px solid var(--green-mid);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--text);
+}
+.bowler-change-banner span { flex: 1; }
+.bowler-change-banner button {
+  background: var(--green-dark);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.bowler-change-banner button.dismiss-x {
+  background: var(--border);
+  color: var(--text);
+  padding: 4px 8px;
+}
 .innings-complete-banner {
   display: block;
   width: 100%;
@@ -682,7 +711,6 @@ body {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.82; }
-}
 }
 .innings-break .target {
   font-size: 24px;

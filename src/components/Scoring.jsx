@@ -15,6 +15,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
   const [sheet, setSheet] = useState(null) // 'wicket' | 'extras' | 'menu' | 'editBall' | 'addPlayer' | 'editNames' | 'changeTeamSizes' | 'changeOvers' | 'removePlayer' | 'bowlerSelect'
   const [pendingBowlerIdx, setPendingBowlerIdx] = useState(null)
   const [editBowlerName, setEditBowlerName] = useState('')
+  const [bowlerChangePending, setBowlerChangePending] = useState(false)
   const [extraType, setExtraType] = useState(null)
   const [extraRuns, setExtraRuns] = useState(1)
   const [noBallBatsmanRuns, setNoBallBatsmanRuns] = useState(0)
@@ -121,6 +122,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
   // swapRuns = the original tap value (for strike rotation logic)
   // actualRuns = the mapped value (what gets recorded in the DB)
   async function recordBall({ runs = 0, swapRuns, isExtra = false, extraType: et = null, extraRuns: er = 0, isWicket = false, dismissalType = null }) {
+    setBowlerChangePending(false) // clear banner when new ball is recorded
     const ball = {
       matchId,
       innings,
@@ -188,9 +190,8 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
         await endMatch(newScore)
       }
     } else if (overJustEnded) {
-      // Prompt to select the next bowler (only if innings isn't ending)
-      setPendingBowlerIdx(newBowlerIdx)
-      setSheet('bowlerSelect')
+      // Non-blocking: show a banner to remind scorer to change bowler
+      setBowlerChangePending(true)
     }
   }
 
@@ -518,6 +519,15 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
         </button>
       )}
 
+      {/* Non-blocking bowler change reminder — disappears on next ball */}
+      {bowlerChangePending && !isInningsOver && (
+        <div className="bowler-change-banner">
+          <span>Over done — <strong>{getPlayerName('bowl', bowlerIdx)}</strong> bowling next</span>
+          <button onClick={() => { openBowlerSelect() }}>Change</button>
+          <button className="dismiss-x" onClick={() => setBowlerChangePending(false)}>✕</button>
+        </div>
+      )}
+
       {/* Scoring grid — large buttons filling available space */}
       <div className="score-grid-large">
         {[0, 1, 2, 3].map(tap => {
@@ -564,7 +574,9 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
           <span className="name">{getPlayerName('bat', nonStriker)}</span>: {score.batsmen[nonStriker]?.runs || 0} ({score.batsmen[nonStriker]?.balls || 0})
         </div>
         <div className="player-info" style={{ marginTop: 4 }}>
-          {getPlayerName('bowl', bowlerIdx)}: {score.bowlers[bowlerIdx] ? `${formatOvers(score.bowlers[bowlerIdx].balls)}-${score.bowlers[bowlerIdx].runs}-${score.bowlers[bowlerIdx].wickets}` : '0.0-0-0'}
+          <span className="name" style={{ cursor: 'pointer', textDecoration: 'underline dotted', color: 'var(--green-dark)' }} onClick={openBowlerSelect}>
+            {getPlayerName('bowl', bowlerIdx)}
+          </span>: {score.bowlers[bowlerIdx] ? `${formatOvers(score.bowlers[bowlerIdx].balls)}-${score.bowlers[bowlerIdx].runs}-${score.bowlers[bowlerIdx].wickets}` : '0.0-0-0'}
         </div>
       </div>
 
