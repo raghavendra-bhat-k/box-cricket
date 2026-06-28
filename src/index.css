@@ -6,9 +6,9 @@
 }
 
 :root {
-  --green-dark: #8b1111;
-  --green-mid: #b91c1c;
-  --green-light: #d4af37;
+  --green-dark: #991b1b;
+  --green-mid: #dc2626;
+  --green-light: #e6c84a;
   --bg: #fff8e5;
   --card-bg: #ffffff;
   --text: #1a1a1a;
@@ -116,12 +116,18 @@ body {
   justify-content: center;
   gap: 6px;
 }
-.btn:active { opacity: 0.7; }
+.btn:active { opacity: 0.9; transform: scale(0.98); }
 
 .btn-primary {
-  background: var(--green-dark);
+  background: linear-gradient(135deg, var(--green-dark), var(--green-mid));
   color: white;
   width: 100%;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+.btn-primary:active {
+  transform: scale(0.97);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  opacity: 1;
 }
 .btn-large {
   font-size: 18px;
@@ -166,6 +172,7 @@ body {
 .form-group input:focus {
   outline: none;
   border-color: var(--green-mid);
+  box-shadow: 0 0 0 3px rgba(153,27,27,0.15);
 }
 
 /* Cards */
@@ -174,7 +181,8 @@ body {
   border-radius: var(--radius);
   padding: 14px;
   margin-bottom: 10px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  border: 1px solid var(--border);
 }
 
 /* Header bar */
@@ -226,26 +234,28 @@ body {
   justify-content: center;
   -webkit-user-select: none;
   user-select: none;
-  transition: transform 0.1s;
+  transition: transform 0.1s, box-shadow 0.1s;
   min-height: 70px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 .score-btn-lg:active {
-  transform: scale(0.93);
+  transform: scale(0.90);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 .score-btn-lg.run {
-  background: var(--green-light);
-  color: white;
+  background: linear-gradient(135deg, #d4af37, #f0d060);
+  color: #1a1a1a;
 }
 .score-btn-lg.boundary {
-  background: var(--blue);
+  background: linear-gradient(135deg, #7a1111, #b91c1c);
   color: white;
 }
 .score-btn-lg.wicket {
-  background: var(--red);
+  background: linear-gradient(135deg, #d32f2f, #f44336);
   color: white;
 }
 .score-btn-lg.extra {
-  background: var(--orange);
+  background: linear-gradient(135deg, #c88719, #f0a030);
   color: white;
 }
 /* Smaller font when showing mapped labels like "1→2" */
@@ -258,7 +268,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--green-dark);
+  background: linear-gradient(135deg, var(--green-dark), var(--green-mid));
   color: white;
   padding: 10px 14px;
   border-radius: 0 0 var(--radius) var(--radius);
@@ -355,6 +365,7 @@ body {
   margin: 0 auto;
   border-radius: 16px 16px 0 0;
   padding: 20px 16px 32px;
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.15);
 }
 .bottom-sheet h3 {
   font-size: 18px;
@@ -380,6 +391,7 @@ body {
   background: var(--green-light);
   color: white;
   border-color: var(--green-light);
+  transform: scale(0.96);
 }
 .sheet-cancel {
   margin-top: 12px;

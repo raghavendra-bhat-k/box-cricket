@@ -96,6 +96,23 @@ export default function NewMatch({ onBack, onStart, rematchFrom }) {
         />
       </div>
 
+      {prev && (
+        <div style={{ textAlign: 'center', margin: '-8px 0 8px' }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ width: 'auto', padding: '8px 20px' }}
+            onClick={() => {
+              const tmpA = teamA; const tmpAP = teamAPlayers
+              setTeamA(teamB); setTeamAPlayers(teamBPlayers)
+              setTeamB(tmpA); setTeamBPlayers(tmpAP)
+            }}
+          >
+            ⇅ Swap Batting Order
+          </button>
+        </div>
+      )}
+
       <div className="form-group">
         <label>Team B</label>
         <input

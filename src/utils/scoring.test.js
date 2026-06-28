@@ -524,3 +524,131 @@ describe('restoreStateFromBalls', () => {
     expect(state.bowlerIdx).toBe(1) // 1 over completed = 1 bowler change
   })
 })
+
+// ─── restoreStateFromBalls — run mapping (tapRuns) ──────────────
+
+describe('restoreStateFromBalls — run mapping (tapRuns)', () => {
+  it('rotates strike when tapRuns=1 even if mapped runs=2', () => {
+    const balls = [makeBall({ runs: 2, tapRuns: 1 })]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(1) // rotated because tapRuns=1 is odd
+    expect(state.nonStriker).toBe(0)
+  })
+
+  it('does not rotate strike when tapRuns=2 even if mapped runs=4', () => {
+    const balls = [makeBall({ runs: 4, tapRuns: 2 })]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(0) // no rotation because tapRuns=2 is even
+    expect(state.nonStriker).toBe(1)
+  })
+
+  it('backward compat: uses runs when tapRuns not stored', () => {
+    const balls = [makeBall({ runs: 1 })]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(1) // rotated because runs=1 odd
+  })
+
+  it('no-ball: strike rotates on odd batsman runs, not counting penalty', () => {
+    // batsman ran 1 (tapRuns=1), mapped to 2 (runs=2), penalty=1 (extraRuns=1)
+    const balls = [makeBall({ runs: 2, tapRuns: 1, isExtra: true, extraType: 'noBall', extraRuns: 1 })]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(1) // rotated
+  })
+
+  it('no-ball: strike stays when batsman ran 2 (even)', () => {
+    // batsman ran 2 (tapRuns=2), mapped to 4 (runs=4), penalty=1
+    const balls = [makeBall({ runs: 4, tapRuns: 2, isExtra: true, extraType: 'noBall', extraRuns: 1 })]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(0) // no rotation
+  })
+
+  it('no-ball: strike stays when batsman ran 0 (just penalty)', () => {
+    const balls = [makeBall({ runs: 0, tapRuns: 0, isExtra: true, extraType: 'noBall', extraRuns: 1 })]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(0) // no rotation, 0 is even
+  })
+
+  it('no-ball: 4 boundary does not rotate strike', () => {
+    const balls = [makeBall({ runs: 4, tapRuns: 4, isExtra: true, extraType: 'noBall', extraRuns: 1 })]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(0) // 4 is even, no rotation
+  })
+
+  it('no-ball: 6 boundary does not rotate strike', () => {
+    const balls = [makeBall({ runs: 6, tapRuns: 6, isExtra: true, extraType: 'noBall', extraRuns: 1 })]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(0) // 6 is even, no rotation
+  })
+
+  it('sequential: run-mapped innings correctly tracks strike across over', () => {
+    // dot, 1(→2 tapRuns=1 rotates), dot, 2(→4 tapRuns=2 no rotate), dot, dot = end over rotates
+    const balls = [
+      makeBall({ runs: 0, tapRuns: 0 }),
+      makeBall({ runs: 2, tapRuns: 1 }), // rotate: s=1,ns=0
+      makeBall({ runs: 0, tapRuns: 0 }),
+      makeBall({ runs: 4, tapRuns: 2 }), // no rotate
+      makeBall({ runs: 0, tapRuns: 0 }),
+      makeBall({ runs: 0, tapRuns: 0 }), // end of over: rotate → s=0,ns=1
+    ]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(0)
+    expect(state.bowlerIdx).toBe(1)
+  })
+})
+
+// ─── restoreStateFromBalls — batsman scenarios ──────────────────
+
+describe('restoreStateFromBalls — batsman scoring scenarios', () => {
+  it('consecutive wickets bring in new batsmen correctly', () => {
+    const balls = [
+      makeBall({ runs: 0, isWicket: true, dismissalType: 'bowled' }), // s=2, ns=1
+      makeBall({ runs: 0, isWicket: true, dismissalType: 'bowled' }), // s=3, ns=1
+    ]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(3)
+    expect(state.nonStriker).toBe(1)
+  })
+
+  it('wicket on last ball of over: new batsman faces next over', () => {
+    const balls = [
+      makeBall({ runs: 0 }), makeBall({ runs: 0 }), makeBall({ runs: 0 }),
+      makeBall({ runs: 0 }), makeBall({ runs: 0 }),
+      makeBall({ runs: 0, isWicket: true, dismissalType: 'bowled' }),
+    ]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(2)
+    expect(state.bowlerIdx).toBe(1)
+  })
+
+  it('run out: new batsman comes in at striker end', () => {
+    const balls = [
+      makeBall({ runs: 1, isWicket: true, dismissalType: 'run out', batsmanIndex: 0 }),
+    ]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(2)
+    expect(state.nonStriker).toBe(1)
+  })
+
+  it('wide rotates strike on odd extra runs', () => {
+    const balls = [
+      makeBall({ runs: 0, isExtra: true, extraType: 'wide', extraRuns: 1 }),
+    ]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(1)
+  })
+
+  it('wide does not rotate strike on even extra runs', () => {
+    const balls = [
+      makeBall({ runs: 0, isExtra: true, extraType: 'wide', extraRuns: 2 }),
+    ]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(0)
+  })
+
+  it('no-ball backward compat (old format runs=0, extraRuns=N): treats extraRuns as 0 for rotation since no tapRuns', () => {
+    // Old format: runs=0, extraRuns=5. physicalRuns=0 (no tapRuns stored). For noBall, runsForSwap=physicalRuns=0 → no rotate.
+    const balls = [makeBall({ runs: 0, isExtra: true, extraType: 'noBall', extraRuns: 5 })]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(0)
+  })
+})

@@ -220,7 +220,7 @@ describe('Scoring - extras', () => {
     expect(labels).not.toContain('5')
   })
 
-  it('+ button shows custom input for extras', async () => {
+  it('+ button shows custom input for no-ball batsman runs', async () => {
     const id = await createTestMatch()
     renderScoring(id)
     await waitFor(() => screen.getByText('EX'))
@@ -228,6 +228,24 @@ describe('Scoring - extras', () => {
     fireEvent.click(screen.getByText('EX'))
     await waitFor(() => screen.getByText('No Ball'))
     fireEvent.click(screen.getByText('No Ball'))
+    await waitFor(() => screen.getByText('+'))
+
+    fireEvent.click(screen.getByText('+'))
+    await waitFor(() => {
+      const input = screen.getByDisplayValue('3')
+      expect(input).toBeInTheDocument()
+      expect(input.type).toBe('number')
+    })
+  })
+
+  it('+ button shows custom input for wide extras', async () => {
+    const id = await createTestMatch()
+    renderScoring(id)
+    await waitFor(() => screen.getByText('EX'))
+
+    fireEvent.click(screen.getByText('EX'))
+    await waitFor(() => screen.getByText('Wide'))
+    fireEvent.click(screen.getByText('Wide'))
     await waitFor(() => screen.getByText('+'))
 
     fireEvent.click(screen.getByText('+'))
