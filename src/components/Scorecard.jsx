@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react'
 import { getMatch, getBalls } from '../db'
 import { calculateScore, formatOvers } from '../utils/scoring'
+import BallLog from './BallLog'
+import Icon from './Icon'
 
-export default function Scorecard({ matchId, onBack, onResume }) {
+export default function Scorecard({ matchId, onBack, onResume, onShareSync }) {
   const [match, setMatch] = useState(null)
   const [innings1, setInnings1] = useState(null)
   const [innings2, setInnings2] = useState(null)
+  const [inningsBalls, setInningsBalls] = useState({ 1: [], 2: [] })
+  const [showBallLog, setShowBallLog] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -13,10 +17,12 @@ export default function Scorecard({ matchId, onBack, onResume }) {
       setMatch(m)
 
       const b1 = await getBalls(matchId, 1)
+      setInningsBalls(prev => ({ ...prev, 1: b1 }))
       setInnings1(calculateScore(b1))
 
       if (m.currentInnings >= 2) {
         const b2 = await getBalls(matchId, 2)
+        setInningsBalls(prev => ({ ...prev, 2: b2 }))
         setInnings2(calculateScore(b2))
       }
     }
@@ -182,6 +188,11 @@ export default function Scorecard({ matchId, onBack, onResume }) {
       {renderInnings(innings1, match.teamA.name, 'A', 'B')}
       {innings2 && renderInnings(innings2, match.teamB.name, 'B', 'A')}
 
+      <button className="btn btn-secondary" style={{ width: '100%', marginTop: 8 }} onClick={() => setShowBallLog(prev => !prev)}>
+        <Icon name="list" /> {showBallLog ? 'Hide Ball by Ball' : 'Ball by Ball'}
+      </button>
+      {showBallLog && <BallLog match={match} inningsBalls={inningsBalls} />}
+
       <div className="share-buttons">
         <button className="btn btn-whatsapp" onClick={shareWhatsApp}>
           Share on WhatsApp
@@ -190,6 +201,9 @@ export default function Scorecard({ matchId, onBack, onResume }) {
           Copy / Share
         </button>
       </div>
+      <button className="btn btn-secondary" style={{ width: '100%', marginTop: 8 }} onClick={() => onShareSync?.()}>
+        <Icon name="share" /> Share Match Sync File
+      </button>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
         {match.status === 'live' && (

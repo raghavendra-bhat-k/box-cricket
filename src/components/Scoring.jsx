@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
-import db, { getMatch, updateMatch, getBalls, addBall, removeLastBall, updateBall } from '../db'
+import { getMatch, updateMatch, getBalls, addBall, removeLastBall, updateBall } from '../db'
 import { calculateScore, getCurrentOver, ballDisplay, formatOvers, restoreStateFromBalls } from '../utils/scoring'
 import MiniScorebar from './MiniScorebar'
+import BallLog from './BallLog'
+import Icon from './Icon'
 
-export default function Scoring({ matchId, onBack, onViewScorecard }) {
+export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync }) {
   const [match, setMatch] = useState(null)
   const [balls, setBalls] = useState([])
   const [innings, setInnings] = useState(1)
@@ -13,11 +15,13 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
   const [sheet, setSheet] = useState(null) // 'wicket' | 'extras' | 'menu' | 'editBall' | 'addPlayer' | 'editNames' | 'changeTeamSizes' | 'changeOvers' | 'removePlayer'
   const [extraType, setExtraType] = useState(null)
   const [extraRuns, setExtraRuns] = useState(1)
+  const [noBallBatsmanRuns, setNoBallBatsmanRuns] = useState(0)
   const [customExtraInput, setCustomExtraInput] = useState(false)
   const [wicketDismissalType, setWicketDismissalType] = useState(null)
   const [wicketRuns, setWicketRuns] = useState(0)
   const [customWicketInput, setCustomWicketInput] = useState(false)
   const [showInningsBreak, setShowInningsBreak] = useState(false)
+  const [inningsEndReason, setInningsEndReason] = useState(null)
   const [firstInningsScore, setFirstInningsScore] = useState(null)
   const [editingBall, setEditingBall] = useState(null)
   const [editBallCustom, setEditBallCustom] = useState(false)
@@ -28,6 +32,12 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
   const [teamSizesInput, setTeamSizesInput] = useState({ teamASize: 0, teamBSize: 0 })
   const [oversInput, setOversInput] = useState(0)
   const [removePlayerTeam, setRemovePlayerTeam] = useState('A')
+  const [allInningsBalls, setAllInningsBalls] = useState({ 1: [], 2: [] })
+
+  function updateBallsState(inningsNumber, updatedBalls) {
+    setAllInningsBalls(prev => ({ ...prev, [inningsNumber]: updatedBalls }))
+    if (inningsNumber === innings) setBalls(updatedBalls)
+  }
 
   const loadData = useCallback(async () => {
     const m = await getMatch(matchId)
@@ -37,6 +47,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
     setInnings(currentInnings)
     const b = await getBalls(matchId, currentInnings)
     setBalls(b)
+    setAllInningsBalls(prev => ({ ...prev, [currentInnings]: b }))
 
     // Restore player positions from ball history
     if (b.length > 0) {
@@ -48,6 +59,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
 
     if (currentInnings === 2) {
       const firstBalls = await getBalls(matchId, 1)
+      setAllInningsBalls(prev => ({ ...prev, 1: firstBalls }))
       const firstScore = calculateScore(firstBalls)
       setFirstInningsScore(firstScore.runs)
     }
@@ -61,11 +73,13 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
       const oversComplete = s.legalBalls >= m.totalOvers * 6
       if (allOut || oversComplete) {
         setFirstInningsScore(s.runs)
+        setInningsEndReason(allOut ? 'all-out' : 'overs-complete')
         setShowInningsBreak(true)
       }
     }
   }, [matchId])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadData() }, [loadData])
 
   if (!match) return <div className="container">Loading...</div>
@@ -111,6 +125,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
       over: Math.floor(score.legalBalls / 6),
       ballInOver: score.legalBalls % 6,
       runs,
+      tapRuns: swapRuns !== undefined ? swapRuns : runs,
       isExtra,
       extraType: et,
       extraRuns: er,
@@ -127,10 +142,10 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
     let newNonStriker = nonStriker
     let newBowlerIdx = bowlerIdx
 
-    const runsForSwap = swapRuns !== undefined ? swapRuns : runs
-    const totalSwapRuns = runsForSwap + er
+    const physicalRuns = swapRuns !== undefined ? swapRuns : runs
+    const runsForRotation = (isExtra && et === 'noBall') ? physicalRuns : physicalRuns + er
 
-    if (!isWicket && totalSwapRuns % 2 === 1) {
+    if (!isWicket && runsForRotation % 2 === 1) {
       ;[newStriker, newNonStriker] = [newNonStriker, newStriker]
     }
 
@@ -152,7 +167,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
     setBowlerIdx(newBowlerIdx)
 
     const updatedBalls = await getBalls(matchId, innings)
-    setBalls(updatedBalls)
+    updateBallsState(innings, updatedBalls)
 
     const newScore = calculateScore(updatedBalls)
     const newBattingCount = battingPlayerCount
@@ -163,6 +178,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
     if (newIsAllOut || newIsOversComplete || newTargetChased) {
       if (innings === 1 && !newTargetChased) {
         setFirstInningsScore(newScore.runs)
+        setInningsEndReason(newIsAllOut ? 'all-out' : 'overs-complete')
         setShowInningsBreak(true)
       } else {
         await endMatch(newScore)
@@ -193,7 +209,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
     const removed = await removeLastBall(matchId, innings)
     if (removed) {
       const updatedBalls = await getBalls(matchId, innings)
-      setBalls(updatedBalls)
+      updateBallsState(innings, updatedBalls)
       recalculateState(updatedBalls)
     }
   }
@@ -225,6 +241,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
     setShowInningsBreak(false)
     const b = await getBalls(matchId, 2)
     setBalls(b)
+    setAllInningsBalls(prev => ({ ...prev, 2: b }))
     setMatch(prev => ({ ...prev, currentInnings: 2 }))
   }
 
@@ -250,16 +267,34 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
   function handleExtraConfirm() {
     const isLegalDelivery = extraType === 'bye' || extraType === 'legBye'
     const isNoBall = extraType === 'noBall'
+
+    let ballRuns, extraRunsVal, swapRunsVal
+    if (isNoBall) {
+      ballRuns = getMappedRuns(noBallBatsmanRuns)
+      extraRunsVal = 1
+      swapRunsVal = noBallBatsmanRuns
+    } else if (isLegalDelivery) {
+      ballRuns = extraRuns
+      extraRunsVal = 0
+      swapRunsVal = undefined
+    } else {
+      // wide
+      ballRuns = 0
+      extraRunsVal = extraRuns
+      swapRunsVal = undefined
+    }
+
     recordBall({
-      // No-ball: batsman gets runs minus 1 penalty; wide: all extras; bye/legBye: all to runs (not credited to batsman in calculateScore)
-      runs: isNoBall ? Math.max(0, extraRuns - 1) : (isLegalDelivery ? extraRuns : 0),
+      runs: ballRuns,
+      swapRuns: swapRunsVal,
       isExtra: true,
       extraType,
-      extraRuns: isNoBall ? 1 : (isLegalDelivery ? 0 : extraRuns),
+      extraRuns: extraRunsVal,
     })
     setSheet(null)
     setExtraType(null)
     setExtraRuns(1)
+    setNoBallBatsmanRuns(0)
     setCustomExtraInput(false)
   }
 
@@ -276,7 +311,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
     const { id, ...changes } = editingBall
     await updateBall(id, changes)
     const updatedBalls = await getBalls(matchId, innings)
-    setBalls(updatedBalls)
+    updateBallsState(innings, updatedBalls)
     recalculateState(updatedBalls)
     setEditingBall(null)
     setSheet(null)
@@ -313,6 +348,15 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
       teamB: ensureSlots(match.teamB.players, bSize)
     })
     setSheet('editNames')
+  }
+
+  function movePlayer(team, fromIdx, toIdx) {
+    setEditNames(prev => {
+      const arr = [...prev[team]]
+      const [removed] = arr.splice(fromIdx, 1)
+      arr.splice(toIdx, 0, removed)
+      return { ...prev, [team]: arr }
+    })
   }
 
   async function saveEditNames() {
@@ -377,18 +421,37 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
 
   // Innings break screen
   if (showInningsBreak) {
+    const reasonText = inningsEndReason === 'all-out'
+      ? `All batsmen out`
+      : `${match.totalOvers} overs completed`
     return (
       <div className="container innings-break">
         <h2>End of 1st Innings</h2>
+        <p style={{ color: 'var(--text-light)', fontSize: 14, marginBottom: 8 }}>{reasonText}</p>
         <p>{match.teamA.name}: {firstInningsScore} runs</p>
         <div className="target">Target: {firstInningsScore + 1}</div>
         <p>{match.teamB.name} need {firstInningsScore + 1} runs from {match.totalOvers} overs</p>
         <button className="btn btn-primary btn-large" style={{ marginTop: 20 }} onClick={startSecondInnings}>
           Start 2nd Innings
         </button>
+        <button className="btn btn-secondary" style={{ marginTop: 10, width: '100%' }} onClick={() => setShowInningsBreak(false)}>
+          ← Continue in 1st Innings
+        </button>
         <button className="btn btn-secondary" style={{ marginTop: 10, width: '100%' }} onClick={onViewScorecard}>
           View Scorecard
         </button>
+        <button className="btn btn-secondary" style={{ marginTop: 10, width: '100%' }} onClick={() => setSheet('ballLog')}>
+          <Icon name="list" /> Ball by Ball
+        </button>
+        {sheet === 'ballLog' && (
+          <div className="bottom-sheet-overlay" onClick={() => setSheet(null)}>
+            <div className="bottom-sheet import-sheet" onClick={e => e.stopPropagation()}>
+              <h3>Ball by Ball</h3>
+              <BallLog match={match} inningsBalls={{ ...allInningsBalls, [innings]: balls }} />
+              <button className="sheet-cancel" onClick={() => setSheet(null)}>Close</button>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -522,21 +585,56 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
 
       {/* Extras bottom sheet */}
       {sheet === 'extras' && (
-        <div className="bottom-sheet-overlay" onClick={() => { setSheet(null); setExtraType(null) }}>
+        <div className="bottom-sheet-overlay" onClick={() => { setSheet(null); setExtraType(null); setNoBallBatsmanRuns(0); setCustomExtraInput(false) }}>
           <div className="bottom-sheet" onClick={e => e.stopPropagation()}>
             <h3>Extra Type</h3>
             {!extraType ? (
               <div className="sheet-options">
                 {[['Wide', 'wide'], ['No Ball', 'noBall'], ['Bye', 'bye'], ['Leg Bye', 'legBye']].map(([label, val]) => (
-                  <button key={val} className="sheet-option" onClick={() => setExtraType(val)}>
+                  <button key={val} className="sheet-option" onClick={() => { setExtraType(val); setNoBallBatsmanRuns(0); setCustomExtraInput(false) }}>
                     {label}
                   </button>
                 ))}
               </div>
+            ) : extraType === 'noBall' ? (
+              <>
+                <p style={{ marginBottom: 8, fontWeight: 600 }}>
+                  No Ball — Batsman runs (0 = just penalty):
+                </p>
+                <div className="extras-runs">
+                  {[0, 1, 2, 4, 6].map(n => (
+                    <button
+                      key={n}
+                      className={`${noBallBatsmanRuns === n && !customExtraInput ? 'selected' : ''}`}
+                      onClick={() => { setNoBallBatsmanRuns(n); setCustomExtraInput(false) }}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                  {!customExtraInput ? (
+                    <button onClick={() => { setCustomExtraInput(true); setNoBallBatsmanRuns(3) }}>+</button>
+                  ) : (
+                    <input
+                      type="number"
+                      min="0"
+                      className="custom-number-input"
+                      value={noBallBatsmanRuns}
+                      onChange={e => setNoBallBatsmanRuns(Math.max(0, parseInt(e.target.value) || 0))}
+                      autoFocus
+                    />
+                  )}
+                </div>
+                <p style={{ fontSize: 13, color: 'var(--text-light)', marginTop: 8 }}>
+                  Total: {getMappedRuns(noBallBatsmanRuns) + 1} runs (1 penalty + {getMappedRuns(noBallBatsmanRuns)} batsman)
+                </p>
+                <button className="btn btn-primary" style={{ marginTop: 14, width: '100%' }} onClick={handleExtraConfirm}>
+                  Confirm
+                </button>
+              </>
             ) : (
               <>
                 <p style={{ marginBottom: 8, fontWeight: 600 }}>
-                  {extraType === 'wide' ? 'Wide' : extraType === 'noBall' ? 'No Ball' : extraType === 'bye' ? 'Bye' : 'Leg Bye'} — Runs:
+                  {extraType === 'wide' ? 'Wide' : extraType === 'bye' ? 'Bye' : 'Leg Bye'} — Runs:
                 </p>
                 <div className="extras-runs">
                   {[1, 2, 3, 4, 6].map(n => (
@@ -566,7 +664,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
                 </button>
               </>
             )}
-            <button className="sheet-cancel" onClick={() => { setSheet(null); setExtraType(null) }}>Cancel</button>
+            <button className="sheet-cancel" onClick={() => { setSheet(null); setExtraType(null); setNoBallBatsmanRuns(0); setCustomExtraInput(false) }}>Cancel</button>
           </div>
         </div>
       )}
@@ -597,6 +695,12 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
               </button>
               <button className="menu-item" onClick={() => { setSheet(null); onViewScorecard() }}>
                 View Scorecard
+              </button>
+              <button className="menu-item" onClick={() => setSheet('ballLog')}>
+                Ball by Ball
+              </button>
+              <button className="menu-item" onClick={() => { setSheet(null); onShareSync?.() }}>
+                Share Match Sync File
               </button>
               <button className="menu-item" onClick={() => { setSheet(null); onBack() }}>
                 Home
@@ -638,37 +742,53 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
               <label style={{ fontWeight: 600, fontSize: 14, color: '#666', display: 'block', marginBottom: 6 }}>
                 {match.teamA.name}
               </label>
-              {editNames.teamA.map((name, i) => (
-                <input
-                  key={`ea-${i}`}
-                  type="text"
-                  value={name}
-                  onChange={e => {
-                    const arr = [...editNames.teamA]
-                    arr[i] = e.target.value
-                    setEditNames(prev => ({ ...prev, teamA: arr }))
-                  }}
-                  placeholder={`Player ${i + 1}`}
-                  style={{ width: '100%', padding: 10, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 15, marginBottom: 6 }}
-                />
-              ))}
+              {editNames.teamA.map((name, i) => {
+                const arrowBtnStyle = { border: '1px solid var(--border)', background: 'var(--card-bg)', borderRadius: 4, padding: '2px 6px', fontSize: 12, cursor: 'pointer', color: 'var(--text-light)', lineHeight: 1 }
+                return (
+                  <div key={`ea-${i}`} style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={e => {
+                        const arr = [...editNames.teamA]
+                        arr[i] = e.target.value
+                        setEditNames(prev => ({ ...prev, teamA: arr }))
+                      }}
+                      placeholder={`Player ${i + 1}`}
+                      style={{ flex: 1, padding: 10, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 15 }}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <button disabled={i === 0} onClick={() => movePlayer('teamA', i, i - 1)} style={arrowBtnStyle}>↑</button>
+                      <button disabled={i === editNames.teamA.length - 1} onClick={() => movePlayer('teamA', i, i + 1)} style={arrowBtnStyle}>↓</button>
+                    </div>
+                  </div>
+                )
+              })}
               <label style={{ fontWeight: 600, fontSize: 14, color: '#666', display: 'block', margin: '12px 0 6px' }}>
                 {match.teamB.name}
               </label>
-              {editNames.teamB.map((name, i) => (
-                <input
-                  key={`eb-${i}`}
-                  type="text"
-                  value={name}
-                  onChange={e => {
-                    const arr = [...editNames.teamB]
-                    arr[i] = e.target.value
-                    setEditNames(prev => ({ ...prev, teamB: arr }))
-                  }}
-                  placeholder={`Player ${i + 1}`}
-                  style={{ width: '100%', padding: 10, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 15, marginBottom: 6 }}
-                />
-              ))}
+              {editNames.teamB.map((name, i) => {
+                const arrowBtnStyle = { border: '1px solid var(--border)', background: 'var(--card-bg)', borderRadius: 4, padding: '2px 6px', fontSize: 12, cursor: 'pointer', color: 'var(--text-light)', lineHeight: 1 }
+                return (
+                  <div key={`eb-${i}`} style={{ display: 'flex', gap: 6, marginBottom: 6, alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={e => {
+                        const arr = [...editNames.teamB]
+                        arr[i] = e.target.value
+                        setEditNames(prev => ({ ...prev, teamB: arr }))
+                      }}
+                      placeholder={`Player ${i + 1}`}
+                      style={{ flex: 1, padding: 10, border: '2px solid #e0e0e0', borderRadius: 8, fontSize: 15 }}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <button disabled={i === 0} onClick={() => movePlayer('teamB', i, i - 1)} style={arrowBtnStyle}>↑</button>
+                      <button disabled={i === editNames.teamB.length - 1} onClick={() => movePlayer('teamB', i, i + 1)} style={arrowBtnStyle}>↓</button>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
             <button className="btn btn-primary" style={{ width: '100%', marginTop: 12 }} onClick={saveEditNames}>
               Save Names
@@ -864,6 +984,16 @@ export default function Scoring({ matchId, onBack, onViewScorecard }) {
               )}
             </div>
             <button className="sheet-cancel" onClick={() => setSheet('menu')}>Back</button>
+          </div>
+        </div>
+      )}
+
+      {sheet === 'ballLog' && (
+        <div className="bottom-sheet-overlay" onClick={() => setSheet(null)}>
+          <div className="bottom-sheet import-sheet" onClick={e => e.stopPropagation()}>
+            <h3>Ball by Ball</h3>
+            <BallLog match={match} inningsBalls={{ ...allInningsBalls, [innings]: balls }} />
+            <button className="sheet-cancel" onClick={() => setSheet(null)}>Close</button>
           </div>
         </div>
       )}

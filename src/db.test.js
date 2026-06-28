@@ -9,6 +9,9 @@ import db, {
   removeLastBall,
   updateBall,
   getBallById,
+  deleteMatch,
+  deleteMatchesByDay,
+  deleteMatchesByTournament,
 } from './db'
 
 beforeEach(async () => {
@@ -184,6 +187,52 @@ describe('ball CRUD', () => {
     const id = await addBall({ matchId: 1, innings: 1, runs: 6 })
     const b = await getBallById(id)
     expect(b.runs).toBe(6)
+  })
+})
+
+// ─── Delete operations ──────────────────────────────────────────
+
+describe('delete operations', () => {
+  it('deleteMatch removes the match and its balls', async () => {
+    const id = await createMatch({ teamA: 'A', teamB: 'B', totalOvers: 5, playersPerSide: 6 })
+    await addBall({ matchId: id, innings: 1, runs: 4 })
+
+    await deleteMatch(id)
+
+    expect(await getMatch(id)).toBeUndefined()
+    expect(await getBalls(id, 1)).toHaveLength(0)
+  })
+
+  it('deleteMatchesByDay removes only matches from that day', async () => {
+    const dayId = await createMatch({ teamA: 'Day A', teamB: 'B', totalOvers: 5, playersPerSide: 6 })
+    const keepId = await createMatch({ teamA: 'Keep A', teamB: 'B', totalOvers: 5, playersPerSide: 6 })
+    await updateMatch(dayId, { date: '2026-06-20T10:00:00.000Z' })
+    await updateMatch(keepId, { date: '2026-06-21T10:00:00.000Z' })
+    await addBall({ matchId: dayId, innings: 1, runs: 1 })
+    await addBall({ matchId: keepId, innings: 1, runs: 2 })
+
+    const deleted = await deleteMatchesByDay('2026-06-20')
+
+    expect(deleted).toBe(1)
+    expect(await getMatch(dayId)).toBeUndefined()
+    expect(await getMatch(keepId)).toBeDefined()
+    expect(await getBalls(dayId, 1)).toHaveLength(0)
+    expect(await getBalls(keepId, 1)).toHaveLength(1)
+  })
+
+  it('deleteMatchesByTournament removes only matches from that tournament', async () => {
+    const cupId = await createMatch({ teamA: 'Cup A', teamB: 'B', totalOvers: 5, playersPerSide: 6, tournamentName: 'Cup' })
+    const keepId = await createMatch({ teamA: 'Keep A', teamB: 'B', totalOvers: 5, playersPerSide: 6, tournamentName: 'Other' })
+    await addBall({ matchId: cupId, innings: 1, runs: 1 })
+    await addBall({ matchId: keepId, innings: 1, runs: 2 })
+
+    const deleted = await deleteMatchesByTournament('Cup')
+
+    expect(deleted).toBe(1)
+    expect(await getMatch(cupId)).toBeUndefined()
+    expect(await getMatch(keepId)).toBeDefined()
+    expect(await getBalls(cupId, 1)).toHaveLength(0)
+    expect(await getBalls(keepId, 1)).toHaveLength(1)
   })
 })
 

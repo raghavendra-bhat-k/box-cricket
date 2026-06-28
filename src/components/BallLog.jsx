@@ -1,0 +1,78 @@
+import { ballDisplay, formatOvers } from '../utils/scoring'
+
+function getPlayerName(team, index, fallback) {
+  return team?.players?.[index] || `${fallback} ${index + 1}`
+}
+
+function buildRows(balls, battingTeam, bowlingTeam) {
+  let runs = 0
+  let wickets = 0
+  let legalBalls = 0
+
+  return balls.map((ball, index) => {
+    const isLegal = !ball.isExtra || (ball.extraType !== 'wide' && ball.extraType !== 'noBall')
+    if (isLegal) legalBalls++
+    runs += ball.runs + (ball.extraRuns || 0)
+    if (ball.isWicket) wickets++
+
+    return {
+      key: ball.uid || ball.id || index,
+      over: isLegal ? formatOvers(legalBalls) : `${Math.floor(legalBalls / 6)}.${legalBalls % 6}+`,
+      display: ballDisplay(ball),
+      score: `${runs}/${wickets}`,
+      batter: ball.batsmanIndex != null ? getPlayerName(battingTeam, ball.batsmanIndex, 'Bat') : '-',
+      bowler: ball.bowlerIndex != null ? getPlayerName(bowlingTeam, ball.bowlerIndex, 'Bowl') : '-',
+    }
+  })
+}
+
+export default function BallLog({ match, inningsBalls }) {
+  const sections = [
+    {
+      innings: 1,
+      title: `${match.teamA.name} innings`,
+      battingTeam: match.teamA,
+      bowlingTeam: match.teamB,
+      balls: inningsBalls[1] || [],
+    },
+    {
+      innings: 2,
+      title: `${match.teamB.name} innings`,
+      battingTeam: match.teamB,
+      bowlingTeam: match.teamA,
+      balls: inningsBalls[2] || [],
+    },
+  ].filter(section => section.balls.length > 0)
+
+  if (sections.length === 0) {
+    return <p className="ball-log-empty">No deliveries recorded yet.</p>
+  }
+
+  return (
+    <div className="ball-log">
+      {sections.map(section => (
+        <section key={section.innings} className="ball-log-section">
+          <h3>{section.title}</h3>
+          <div className="ball-log-table">
+            <div className="ball-log-head">
+              <span>Ball</span>
+              <span>Event</span>
+              <span>Score</span>
+              <span>Batter</span>
+              <span>Bowler</span>
+            </div>
+            {buildRows(section.balls, section.battingTeam, section.bowlingTeam).map(row => (
+              <div key={row.key} className="ball-log-row">
+                <span>{row.over}</span>
+                <strong>{row.display}</strong>
+                <span>{row.score}</span>
+                <span>{row.batter}</span>
+                <span>{row.bowler}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  )
+}

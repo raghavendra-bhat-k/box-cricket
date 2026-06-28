@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import App from './App'
 import db, { createMatch, addBall } from './db'
+import { exportMatchPayload } from './utils/sync'
 
 beforeEach(async () => {
   await db.balls.clear()
@@ -13,6 +14,18 @@ describe('App - navigation', () => {
     render(<App />)
     expect(screen.getByText('Box Cricket')).toBeInTheDocument()
     expect(screen.getByText('New Match')).toBeInTheDocument()
+  })
+
+  it('defaults to red and gold palette and allows changing palettes', async () => {
+    render(<App />)
+    const palette = screen.getByLabelText('Palette')
+    expect(palette.value).toBe('royal')
+
+    fireEvent.change(palette, { target: { value: 'sky' } })
+
+    await waitFor(() => {
+      expect(document.documentElement.dataset.theme).toBe('sky')
+    })
   })
 
   it('navigates to new match screen', () => {
@@ -44,7 +57,7 @@ describe('App - navigation', () => {
   })
 
   it('resumes a live match from match list', async () => {
-    const id = await createMatch({
+    await createMatch({
       teamA: 'Alpha',
       teamB: 'Beta',
       totalOvers: 6,
@@ -95,6 +108,34 @@ describe('App - navigation', () => {
       expect(screen.getByDisplayValue('Beta')).toBeInTheDocument()
       expect(screen.getByDisplayValue('8')).toBeInTheDocument()
       expect(screen.getByDisplayValue('5')).toBeInTheDocument()
+    })
+  })
+
+  it('imports a sync file through the home import flow', async () => {
+    const id = await createMatch({
+      teamA: 'Import A',
+      teamB: 'Import B',
+      totalOvers: 6,
+      playersPerSide: 6,
+    })
+    await addBall({ matchId: id, innings: 1, over: 0, ballInOver: 0, runs: 4, isExtra: false, extraType: null, extraRuns: 0, isWicket: false, dismissalType: null, batsmanIndex: 0, bowlerIndex: 0 })
+    const payload = await exportMatchPayload(id)
+    await db.balls.clear()
+    await db.matches.clear()
+
+    render(<App />)
+    const file = new File([JSON.stringify(payload)], 'handoff.boxcricket.json', { type: 'application/json' })
+    const input = screen.getByLabelText('Import Sync File')
+    fireEvent.change(input, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(screen.getByText('Import Selected')).toBeInTheDocument()
+      expect(screen.getByText('Import A vs Import B')).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByText('Import Selected'))
+
+    await waitFor(() => {
+      expect(screen.getByText('Import A vs Import B')).toBeInTheDocument()
     })
   })
 })

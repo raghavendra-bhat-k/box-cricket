@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import Scoring from './Scoring'
-import db, { createMatch, addBall, getBalls, updateMatch } from '../db'
+import db, { createMatch, addBall, getBalls } from '../db'
 
 const onBack = vi.fn()
 const onViewScorecard = vi.fn()
+const onShareSync = vi.fn()
 
 async function createTestMatch(overrides = {}) {
   return createMatch({
@@ -23,11 +24,12 @@ beforeEach(async () => {
   await db.matches.clear()
   onBack.mockClear()
   onViewScorecard.mockClear()
+  onShareSync.mockClear()
 })
 
 function renderScoring(matchId) {
   return render(
-    <Scoring matchId={matchId} onBack={onBack} onViewScorecard={onViewScorecard} />
+    <Scoring matchId={matchId} onBack={onBack} onViewScorecard={onViewScorecard} onShareSync={onShareSync} />
   )
 }
 
@@ -64,6 +66,37 @@ describe('Scoring - basic rendering', () => {
       expect(screen.getByText(/Bob/)).toBeInTheDocument()
       expect(screen.getByText(/George/)).toBeInTheDocument()
     })
+  })
+
+  it('calls onShareSync from the match options menu', async () => {
+    const id = await createTestMatch()
+    renderScoring(id)
+    await waitFor(() => screen.getByLabelText('Menu'))
+
+    fireEvent.click(screen.getByLabelText('Menu'))
+    await waitFor(() => screen.getByText('Share Match Sync File'))
+    fireEvent.click(screen.getByText('Share Match Sync File'))
+
+    expect(onShareSync).toHaveBeenCalled()
+  })
+
+  it('opens ball by ball score from the match options menu', async () => {
+    const id = await createTestMatch()
+    await addBall({
+      matchId: id, innings: 1, over: 0, ballInOver: 0,
+      runs: 4, isExtra: false, extraType: null, extraRuns: 0,
+      isWicket: false, dismissalType: null, batsmanIndex: 0, bowlerIndex: 0,
+    })
+    renderScoring(id)
+    await waitFor(() => screen.getByLabelText('Menu'))
+
+    fireEvent.click(screen.getByLabelText('Menu'))
+    await waitFor(() => screen.getByText('Ball by Ball'))
+    fireEvent.click(screen.getByText('Ball by Ball'))
+
+    expect(screen.getByText('Team A innings')).toBeInTheDocument()
+    expect(screen.getByText('0.1')).toBeInTheDocument()
+    expect(screen.getByText('4/0')).toBeInTheDocument()
   })
 })
 
@@ -187,7 +220,7 @@ describe('Scoring - extras', () => {
     expect(labels).not.toContain('5')
   })
 
-  it('+ button shows custom input for extras', async () => {
+  it('+ button shows custom input for no-ball batsman runs', async () => {
     const id = await createTestMatch()
     renderScoring(id)
     await waitFor(() => screen.getByText('EX'))
@@ -195,6 +228,24 @@ describe('Scoring - extras', () => {
     fireEvent.click(screen.getByText('EX'))
     await waitFor(() => screen.getByText('No Ball'))
     fireEvent.click(screen.getByText('No Ball'))
+    await waitFor(() => screen.getByText('+'))
+
+    fireEvent.click(screen.getByText('+'))
+    await waitFor(() => {
+      const input = screen.getByDisplayValue('3')
+      expect(input).toBeInTheDocument()
+      expect(input.type).toBe('number')
+    })
+  })
+
+  it('+ button shows custom input for wide extras', async () => {
+    const id = await createTestMatch()
+    renderScoring(id)
+    await waitFor(() => screen.getByText('EX'))
+
+    fireEvent.click(screen.getByText('EX'))
+    await waitFor(() => screen.getByText('Wide'))
+    fireEvent.click(screen.getByText('Wide'))
     await waitFor(() => screen.getByText('+'))
 
     fireEvent.click(screen.getByText('+'))

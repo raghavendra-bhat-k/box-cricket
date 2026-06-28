@@ -152,10 +152,16 @@ export function restoreStateFromBalls(ballHistory) {
 
   for (const ball of ballHistory) {
     const isLegal = !ball.isExtra || (ball.extraType !== 'wide' && ball.extraType !== 'noBall')
-    const totalRuns = ball.runs + (ball.extraRuns || 0)
+
+    // tapRuns = physical runs before mapping (stored in ball). Fall back to ball.runs for backward compat.
+    const physicalRuns = ball.tapRuns !== undefined ? ball.tapRuns : ball.runs
+    // No-ball: only batsman's physical runs matter for rotation (not the 1-run penalty)
+    const runsForSwap = (ball.isExtra && ball.extraType === 'noBall')
+      ? physicalRuns
+      : physicalRuns + (ball.extraRuns || 0)
 
     // Strike rotation for odd runs (excluding wickets)
-    if (!ball.isWicket && totalRuns % 2 === 1) {
+    if (!ball.isWicket && runsForSwap % 2 === 1) {
       ;[s, ns] = [ns, s]
     }
 
