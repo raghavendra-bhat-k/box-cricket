@@ -12,7 +12,9 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
   const [striker, setStriker] = useState(0)
   const [nonStriker, setNonStriker] = useState(1)
   const [bowlerIdx, setBowlerIdx] = useState(0)
-  const [sheet, setSheet] = useState(null) // 'wicket' | 'extras' | 'menu' | 'editBall' | 'addPlayer' | 'editNames' | 'changeTeamSizes' | 'changeOvers' | 'removePlayer'
+  const [sheet, setSheet] = useState(null) // 'wicket' | 'extras' | 'menu' | 'editBall' | 'addPlayer' | 'editNames' | 'changeTeamSizes' | 'changeOvers' | 'removePlayer' | 'bowlerSelect'
+  const [pendingBowlerIdx, setPendingBowlerIdx] = useState(null)
+  const [editBowlerName, setEditBowlerName] = useState('')
   const [extraType, setExtraType] = useState(null)
   const [extraRuns, setExtraRuns] = useState(1)
   const [noBallBatsmanRuns, setNoBallBatsmanRuns] = useState(0)
@@ -155,11 +157,13 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
 
     const isLegal = !isExtra || (et !== 'wide' && et !== 'noBall')
     const newLegalBalls = score.legalBalls + (isLegal ? 1 : 0)
+    let overJustEnded = false
     if (newLegalBalls > 0 && newLegalBalls % 6 === 0 && isLegal) {
       if (!isWicket) {
         ;[newStriker, newNonStriker] = [newNonStriker, newStriker]
       }
       newBowlerIdx++
+      overJustEnded = true
     }
 
     setStriker(newStriker)
@@ -183,6 +187,10 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
       } else {
         await endMatch(newScore)
       }
+    } else if (overJustEnded) {
+      // Prompt to select the next bowler (only if innings isn't ending)
+      setPendingBowlerIdx(newBowlerIdx)
+      setSheet('bowlerSelect')
     }
   }
 
@@ -230,6 +238,30 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
   function swapStriker() {
     setStriker(nonStriker)
     setNonStriker(striker)
+  }
+
+  function openBowlerSelect() {
+    setPendingBowlerIdx(bowlerIdx)
+    setSheet('bowlerSelect')
+  }
+
+  function selectBowler(idx) {
+    setBowlerIdx(idx)
+    setSheet(null)
+    setPendingBowlerIdx(null)
+  }
+
+  async function saveBowlerName() {
+    const name = editBowlerName.trim()
+    if (!name) return
+    const bowlingTeamKey = innings === 1 ? 'teamB' : 'teamA'
+    const team = match[bowlingTeamKey]
+    const players = [...(team.players || [])]
+    while (players.length <= (pendingBowlerIdx ?? bowlerIdx)) players.push('')
+    players[pendingBowlerIdx ?? bowlerIdx] = name
+    await updateMatch(matchId, { [bowlingTeamKey]: { ...team, players } })
+    setMatch(prev => ({ ...prev, [bowlingTeamKey]: { ...prev[bowlingTeamKey], players } }))
+    setEditBowlerName('')
   }
 
   async function startSecondInnings() {
@@ -427,7 +459,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
     return (
       <div className="container innings-break">
         <h2>End of 1st Innings</h2>
-        <p style={{ color: 'var(--text-light)', fontSize: 14, marginBottom: 8 }}>{reasonText}</p>
+        <div className="innings-end-reason">{reasonText}</div>
         <p>{match.teamA.name}: {firstInningsScore} runs</p>
         <div className="target">Target: {firstInningsScore + 1}</div>
         <p>{match.teamB.name} need {firstInningsScore + 1} runs from {match.totalOvers} overs</p>
@@ -478,6 +510,13 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
         onMenu={() => setSheet('menu')}
         firstInningsScore={firstInningsScore}
       />
+
+      {/* Innings complete banner — shown when innings is over but user chose to stay */}
+      {isInningsOver && innings === 1 && !targetChased && (
+        <button className="innings-complete-banner" onClick={() => setShowInningsBreak(true)}>
+          1st innings complete ({inningsEndReason === 'all-out' ? 'all out' : `${match.totalOvers} overs done`}) — Tap to start 2nd innings →
+        </button>
+      )}
 
       {/* Scoring grid — large buttons filling available space */}
       <div className="score-grid-large">
@@ -680,6 +719,9 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
               </button>
               <button className="menu-item" onClick={() => { setAddPlayerTeam('B'); setSheet('addPlayer') }}>
                 Add Player to {match.teamB.name}
+              </button>
+              <button className="menu-item" onClick={() => { setSheet(null); openBowlerSelect() }}>
+                Change Bowler
               </button>
               <button className="menu-item" onClick={openEditNames}>
                 Edit Player Names
@@ -994,6 +1036,65 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
             <h3>Ball by Ball</h3>
             <BallLog match={match} inningsBalls={{ ...allInningsBalls, [innings]: balls }} />
             <button className="sheet-cancel" onClick={() => setSheet(null)}>Close</button>
+          </div>
+        </div>
+      )}
+
+      {/* Bowler selection sheet */}
+      {sheet === 'bowlerSelect' && (
+        <div className="bottom-sheet-overlay" onClick={() => { setSheet(null); setPendingBowlerIdx(null) }}>
+          <div className="bottom-sheet" onClick={e => e.stopPropagation()}>
+            <h3>Select Bowler</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-light)', marginBottom: 12 }}>
+              {bowlingTeam.name} — Over {Math.floor(score.legalBalls / 6) + 1}
+            </p>
+            <div style={{ maxHeight: '45vh', overflowY: 'auto' }}>
+              {Array.from({ length: Math.max(bowlingTeam.players?.length || 0, (pendingBowlerIdx ?? bowlerIdx) + 1) }, (_, i) => (
+                <button
+                  key={i}
+                  className="menu-item"
+                  style={{ fontWeight: i === (pendingBowlerIdx ?? bowlerIdx) ? 700 : 500, color: i === (pendingBowlerIdx ?? bowlerIdx) ? 'var(--green-dark)' : 'var(--text)' }}
+                  onClick={() => selectBowler(i)}
+                >
+                  {getPlayerName('bowl', i)}
+                  {i === (pendingBowlerIdx ?? bowlerIdx) && ' ✓'}
+                </button>
+              ))}
+              {/* Option to add a new bowler slot */}
+              <button
+                className="menu-item"
+                style={{ color: 'var(--green-mid)' }}
+                onClick={() => selectBowler(Math.max(bowlingTeam.players?.length || 0, (pendingBowlerIdx ?? bowlerIdx) + 1))}
+              >
+                + New Bowler
+              </button>
+            </div>
+            {/* Quick name edit for current bowler */}
+            <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+              <p style={{ fontSize: 12, color: 'var(--text-light)', marginBottom: 6 }}>
+                Rename selected bowler:
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="text"
+                  value={editBowlerName}
+                  onChange={e => setEditBowlerName(e.target.value)}
+                  placeholder={getPlayerName('bowl', pendingBowlerIdx ?? bowlerIdx)}
+                  style={{ flex: 1, padding: '8px 10px', border: '2px solid var(--border)', borderRadius: 8, fontSize: 14 }}
+                />
+                <button
+                  className="btn btn-primary"
+                  style={{ width: 'auto', padding: '8px 14px', fontSize: 14 }}
+                  onClick={async () => { await saveBowlerName(); }}
+                  disabled={!editBowlerName.trim()}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+            <button className="sheet-cancel" style={{ marginTop: 10 }} onClick={() => { setSheet(null); setPendingBowlerIdx(null); setEditBowlerName('') }}>
+              Keep Current Bowler
+            </button>
           </div>
         </div>
       )}

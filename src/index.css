@@ -652,7 +652,37 @@ body {
 }
 .innings-break h2 {
   color: var(--green-dark);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+}
+.innings-end-reason {
+  display: inline-block;
+  background: var(--border);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 5px 14px;
+  border-radius: 20px;
+  margin-bottom: 14px;
+}
+.innings-complete-banner {
+  display: block;
+  width: 100%;
+  background: linear-gradient(135deg, var(--green-dark), var(--green-mid));
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  padding: 12px 16px;
+  border: none;
+  border-radius: var(--radius);
+  margin-bottom: 10px;
+  cursor: pointer;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.82; }
+}
 }
 .innings-break .target {
   font-size: 24px;
