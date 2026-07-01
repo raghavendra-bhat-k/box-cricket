@@ -49,11 +49,11 @@ export default function Scorecard({ matchId, onBack, onResume, onShareSync }) {
       }
       t += `\nExtras: ${score.extras.wides + score.extras.noBalls + score.extras.byes + score.extras.legByes}\n`
 
-      const bowlerEntries = Object.entries(score.bowlers).sort(([a], [b]) => Number(a) - Number(b))
+      const bowlerEntries = Object.entries(score.bowlers).sort(([, a], [, b]) => (a.index ?? Infinity) - (b.index ?? Infinity))
       if (bowlerEntries.length > 0) {
         t += `\nBowling:\n`
-        for (const [idx, bowl] of bowlerEntries) {
-          const name = getPlayerName(bowlingTeam, Number(idx), 'Bowl')
+        for (const [key, bowl] of bowlerEntries) {
+          const name = isNaN(Number(key)) ? key : getPlayerName(bowlingTeam, Number(key), 'Bowl')
           t += `${name}: ${formatOvers(bowl.balls)}-${bowl.runs}-${bowl.wickets}\n`
         }
       }
@@ -110,7 +110,8 @@ export default function Scorecard({ matchId, onBack, onResume, onShareSync }) {
 
   function renderInnings(score, teamName, battingTeam, bowlingTeam) {
     const batsmenEntries = Object.entries(score.batsmen).sort(([a], [b]) => Number(a) - Number(b))
-    const bowlerEntries = Object.entries(score.bowlers).sort(([a], [b]) => Number(a) - Number(b))
+    // Bowler keys may be names (new) or integer strings (old). Sort by first appearance index when available.
+    const bowlerEntries = Object.entries(score.bowlers).sort(([, a], [, b]) => (a.index ?? Infinity) - (b.index ?? Infinity))
 
     return (
       <div className="scorecard-section">
@@ -152,12 +153,14 @@ export default function Scorecard({ matchId, onBack, onResume, onShareSync }) {
             </tr>
           </thead>
           <tbody>
-            {bowlerEntries.map(([idx, bowl]) => {
+            {bowlerEntries.map(([key, bowl]) => {
               const overs = bowl.balls / 6
               const econ = overs > 0 ? (bowl.runs / overs).toFixed(1) : '-'
+              // key is a name (new balls) or integer string (old balls)
+              const bowlerName = isNaN(Number(key)) ? key : getPlayerName(bowlingTeam, Number(key), 'Bowl')
               return (
-                <tr key={idx}>
-                  <td>{getPlayerName(bowlingTeam, Number(idx), 'Bowl')}</td>
+                <tr key={key}>
+                  <td>{bowlerName}</td>
                   <td>{formatOvers(bowl.balls)}</td>
                   <td>{bowl.runs}</td>
                   <td><strong>{bowl.wickets}</strong></td>

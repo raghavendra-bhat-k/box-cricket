@@ -63,14 +63,14 @@ export function withBallSyncFields(ball, sequence) {
   };
 }
 
-export async function createMatch({ teamA, teamB, totalOvers, playersPerSide, teamAPlayers, teamBPlayers, rules, tournamentName }) {
+export async function createMatch({ teamA, teamB, totalOvers, playersPerSide, teamAPlayers, teamBPlayers, teamABowlingOrder, teamBBowlingOrder, rules, tournamentName }) {
   const date = new Date().toISOString();
   const matchId = await db.matches.add({
     ...withMatchSyncFields({
       date,
       status: 'live',
-      teamA: { name: teamA, players: teamAPlayers || [] },
-      teamB: { name: teamB, players: teamBPlayers || [] },
+      teamA: { name: teamA, players: teamAPlayers || [], bowlingOrder: teamABowlingOrder || [...(teamAPlayers || [])] },
+      teamB: { name: teamB, players: teamBPlayers || [], bowlingOrder: teamBBowlingOrder || [...(teamBPlayers || [])] },
       totalOvers,
       playersPerSide,
       teamASize: playersPerSide,
