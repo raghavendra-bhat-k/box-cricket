@@ -17,6 +17,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
   const [pendingWicketNextStriker, setPendingWicketNextStriker] = useState(null) // new striker index after wicket
   const [pendingBowlerIdx, setPendingBowlerIdx] = useState(null)
   const [editBowlerName, setEditBowlerName] = useState('')
+  const [bowlerSearch, setBowlerSearch] = useState('')
   const [bowlerChangePending, setBowlerChangePending] = useState(false)
   const [extraType, setExtraType] = useState(null)
   const [extraRuns, setExtraRuns] = useState(1)
@@ -263,6 +264,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
 
   function openBowlerSelect() {
     setPendingBowlerIdx(bowlerIdx)
+    setBowlerSearch('')
     setSheet('bowlerSelect')
   }
 
@@ -291,6 +293,24 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
     const team = match[bowlingTeamKey]
     await updateMatch(matchId, { [bowlingTeamKey]: { ...team, bowlingOrder: newOrder } })
     setMatch(prev => ({ ...prev, [bowlingTeamKey]: { ...prev[bowlingTeamKey], bowlingOrder: newOrder } }))
+  }
+
+  async function selectBowlerByName(name) {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    const bowlingTeamKey = innings === 1 ? 'teamB' : 'teamA'
+    const team = match[bowlingTeamKey]
+    const idx = pendingBowlerIdx ?? bowlerIdx
+    const bowlingOrder = [...(team.bowlingOrder || team.players || [])]
+    while (bowlingOrder.length <= idx) bowlingOrder.push('')
+    bowlingOrder[idx] = trimmed
+    await updateMatch(matchId, { [bowlingTeamKey]: { ...team, bowlingOrder } })
+    setMatch(prev => ({ ...prev, [bowlingTeamKey]: { ...prev[bowlingTeamKey], bowlingOrder } }))
+    setBowlerIdx(idx)
+    setSheet(null)
+    setPendingBowlerIdx(null)
+    setBowlerSearch('')
+    setEditBowlerName('')
   }
 
   async function startSecondInnings() {
@@ -1075,71 +1095,93 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
 
       {/* Bowler selection sheet */}
       {sheet === 'bowlerSelect' && (() => {
+        const allPlayers = bowlingTeam.players || []
+        const currentBowlName = getPlayerName('bowl', pendingBowlerIdx ?? bowlerIdx)
+        const query = bowlerSearch.trim().toLowerCase()
+        // Suggestions: team player roster filtered by search query
+        const suggestions = allPlayers.filter(p => p && p.toLowerCase().includes(query))
+        // If the typed text doesn't exactly match any player, offer it as a custom entry
+        const exactMatch = allPlayers.some(p => p?.toLowerCase() === query)
+        const showCustom = query.length > 0 && !exactMatch
+        // Bowling rotation (for drag reorder)
         const bowlOrder = bowlingTeam.bowlingOrder?.length
           ? bowlingTeam.bowlingOrder
-          : (bowlingTeam.players?.length ? bowlingTeam.bowlingOrder || bowlingTeam.players : [])
-        const currentBowlName = getPlayerName('bowl', pendingBowlerIdx ?? bowlerIdx)
+          : allPlayers.length ? [...allPlayers] : []
         return (
-          <div className="bottom-sheet-overlay" onClick={() => { setSheet(null); setPendingBowlerIdx(null) }}>
+          <div className="bottom-sheet-overlay" onClick={() => { setSheet(null); setPendingBowlerIdx(null); setBowlerSearch('') }}>
             <div className="bottom-sheet" onClick={e => e.stopPropagation()}>
-              <h3>Select Bowler</h3>
-              <p style={{ fontSize: 13, color: 'var(--text-light)', marginBottom: 4 }}>
+              <h3>Who's bowling?</h3>
+              <p style={{ fontSize: 13, color: 'var(--text-light)', marginBottom: 10 }}>
                 {bowlingTeam.name} — Over {Math.floor(score.legalBalls / 6) + 1}
+                {currentBowlName && <span style={{ marginLeft: 6, color: 'var(--green-dark)' }}>· Current: {currentBowlName}</span>}
               </p>
-              <p style={{ fontSize: 11, color: 'var(--text-light)', marginBottom: 10 }}>
-                Hold ☰ to drag and reorder bowling rotation
-              </p>
-              <div style={{ maxHeight: '38vh', overflowY: 'auto' }}>
-                {bowlOrder.length > 0 ? (
-                  <DragList
-                    items={bowlOrder}
-                    onChange={saveBowlingOrder}
-                    renderItem={(name, i) => (
-                      <button
-                        className="menu-item drag-list-btn"
-                        style={{ fontWeight: i === (pendingBowlerIdx ?? bowlerIdx) ? 700 : 500, color: i === (pendingBowlerIdx ?? bowlerIdx) ? 'var(--green-dark)' : 'var(--text)' }}
-                        onClick={() => selectBowler(i)}
-                      >
-                        {name || `Bowl ${i + 1}`}
-                        {i === (pendingBowlerIdx ?? bowlerIdx) && ' ✓'}
-                      </button>
-                    )}
-                  />
-                ) : (
-                  <p style={{ color: 'var(--text-light)', fontSize: 13 }}>No bowlers set — add names below</p>
-                )}
-                <button
-                  className="menu-item"
-                  style={{ color: 'var(--green-mid)' }}
-                  onClick={() => selectBowler(bowlOrder.length)}
-                >
-                  + Add Bowler
-                </button>
-              </div>
-              {/* Quick name edit */}
-              <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-                <p style={{ fontSize: 12, color: 'var(--text-light)', marginBottom: 6 }}>
-                  Add / rename bowler at slot {(pendingBowlerIdx ?? bowlerIdx) + 1}:
-                </p>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    type="text"
-                    value={editBowlerName}
-                    onChange={e => setEditBowlerName(e.target.value)}
-                    placeholder={currentBowlName}
-                    style={{ flex: 1, padding: '8px 10px', border: '2px solid var(--border)', borderRadius: 8, fontSize: 14 }}
-                  />
+
+              {/* Search input — type to filter team players */}
+              <input
+                type="text"
+                value={bowlerSearch}
+                onChange={e => setBowlerSearch(e.target.value)}
+                placeholder="Search player name…"
+                autoFocus
+                style={{ width: '100%', padding: '10px 12px', border: '2px solid var(--green-mid)', borderRadius: 8, fontSize: 15, marginBottom: 8 }}
+              />
+
+              {/* Filtered player list */}
+              <div style={{ maxHeight: '32vh', overflowY: 'auto' }}>
+                {(query ? suggestions : allPlayers.filter(Boolean)).map((name, i) => (
                   <button
-                    className="btn btn-primary"
-                    style={{ width: 'auto', padding: '8px 14px', fontSize: 14 }}
-                    onClick={async () => { await saveBowlerName(); }}
-                    disabled={!editBowlerName.trim()}
+                    key={i}
+                    className="menu-item"
+                    style={{ fontWeight: name === currentBowlName ? 700 : 500, color: name === currentBowlName ? 'var(--green-dark)' : 'var(--text)' }}
+                    onClick={() => selectBowlerByName(name)}
                   >
-                    Save
+                    {name}
+                    {name === currentBowlName && ' ✓'}
                   </button>
-                </div>
+                ))}
+                {/* Custom name not in roster */}
+                {showCustom && (
+                  <button className="menu-item" style={{ color: 'var(--green-mid)' }} onClick={() => selectBowlerByName(bowlerSearch)}>
+                    + Use "{bowlerSearch}"
+                  </button>
+                )}
+                {/* Empty state */}
+                {allPlayers.filter(Boolean).length === 0 && !query && (
+                  <p style={{ color: 'var(--text-light)', fontSize: 13, padding: '8px 0' }}>
+                    No players added — type a name above to add one
+                  </p>
+                )}
+                {query && suggestions.length === 0 && !showCustom && (
+                  <p style={{ color: 'var(--text-light)', fontSize: 13, padding: '8px 0' }}>No match</p>
+                )}
               </div>
-              <button className="sheet-cancel" style={{ marginTop: 10 }} onClick={() => { setSheet(null); setPendingBowlerIdx(null); setEditBowlerName('') }}>
+
+              {/* Bowling rotation reorder — collapsed by default */}
+              {bowlOrder.length > 0 && (
+                <details style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                  <summary style={{ fontSize: 13, color: 'var(--text-light)', cursor: 'pointer', userSelect: 'none' }}>
+                    Reorder bowling rotation (drag ☰)
+                  </summary>
+                  <div style={{ marginTop: 8, maxHeight: '25vh', overflowY: 'auto' }}>
+                    <DragList
+                      items={bowlOrder}
+                      onChange={saveBowlingOrder}
+                      renderItem={(name, i) => (
+                        <button
+                          className="menu-item drag-list-btn"
+                          style={{ fontWeight: i === (pendingBowlerIdx ?? bowlerIdx) ? 700 : 500, color: i === (pendingBowlerIdx ?? bowlerIdx) ? 'var(--green-dark)' : 'var(--text)' }}
+                          onClick={() => selectBowler(i)}
+                        >
+                          {name || `Bowl ${i + 1}`}
+                          {i === (pendingBowlerIdx ?? bowlerIdx) && ' ✓'}
+                        </button>
+                      )}
+                    />
+                  </div>
+                </details>
+              )}
+
+              <button className="sheet-cancel" style={{ marginTop: 12 }} onClick={() => { setSheet(null); setPendingBowlerIdx(null); setBowlerSearch(''); setEditBowlerName('') }}>
                 Keep Current Bowler
               </button>
             </div>
