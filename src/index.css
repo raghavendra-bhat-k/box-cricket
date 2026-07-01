@@ -926,3 +926,64 @@ body {
   text-align: center;
   padding: 18px 0;
 }
+
+/* ---- DragList: hold-and-drag to reorder ---- */
+.drag-list {
+  position: relative;
+}
+
+.drag-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  background: var(--card-bg);
+  border-radius: 8px;
+  transition: opacity 0.15s, box-shadow 0.15s;
+}
+
+.drag-item--dragging {
+  opacity: 0.35;
+}
+
+.drag-item--ghost {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  border-radius: 8px;
+  border: 2px solid var(--green-mid);
+  opacity: 0.95;
+  background: var(--card-bg);
+  padding: 4px 0;
+  margin-bottom: 0;
+}
+
+.drag-placeholder {
+  height: 40px;
+  border: 2px dashed var(--green-mid);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  background: color-mix(in srgb, var(--green-mid) 8%, transparent);
+}
+
+.drag-handle {
+  padding: 8px 10px;
+  color: #aaa;
+  font-size: 18px;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  flex-shrink: 0;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+  color: var(--green-mid);
+}
+
+/* Button inside DragList row (bowler select) */
+.drag-list-btn {
+  flex: 1;
+  text-align: left;
+  background: transparent;
+  border: none;
+  margin: 0 !important;
+}

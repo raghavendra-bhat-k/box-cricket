@@ -49,11 +49,11 @@ export function calculateScore(balls) {
       }
     }
 
-    // Track bowler stats
-    const bowlKey = ball.bowlerIndex;
+    // Track bowler stats — key by name when available for unified multi-spell rows
+    const bowlKey = ball.bowlerName !== undefined ? ball.bowlerName : ball.bowlerIndex;
     if (bowlKey !== undefined) {
       if (!bowlers[bowlKey]) {
-        bowlers[bowlKey] = { balls: 0, runs: 0, wickets: 0 };
+        bowlers[bowlKey] = { balls: 0, runs: 0, wickets: 0, index: ball.bowlerIndex };
       }
       bowlers[bowlKey].runs += totalRuns;
       if (!ball.isExtra || (ball.extraType !== 'wide' && ball.extraType !== 'noBall')) {

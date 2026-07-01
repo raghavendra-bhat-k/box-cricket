@@ -646,17 +646,23 @@ describe('Scoring - innings transitions', () => {
     })
 
     renderScoring(id)
-    await waitFor(() => screen.getByText('W'))
+    // Use role-based selector since 'W' also appears in current-over ball display after a wicket
+    const wicketBtn = () => screen.getByRole('button', { name: 'W' })
+    await waitFor(() => wicketBtn())
 
     // Record 2 wickets (for 3-player team = all out)
-    fireEvent.click(screen.getByText('W'))
+    fireEvent.click(wicketBtn())
     await waitFor(() => screen.getByText('Bowled'))
     fireEvent.click(screen.getByText('Bowled'))
     await waitFor(() => screen.getByText('Confirm'))
     fireEvent.click(screen.getByText('Confirm'))
 
-    await waitFor(() => screen.getByText('W'))
-    fireEvent.click(screen.getByText('W'))
+    // Dismiss "Who's next?" picker after 1st wicket
+    await waitFor(() => screen.getByText("Who's batting next?"))
+    fireEvent.click(screen.getByText(/Use Next in Order/))
+
+    await waitFor(() => wicketBtn())
+    fireEvent.click(wicketBtn())
     await waitFor(() => screen.getByText('Bowled'))
     fireEvent.click(screen.getByText('Bowled'))
     await waitFor(() => screen.getByText('Confirm'))
