@@ -147,7 +147,11 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
     let newBowlerIdx = bowlerIdx
 
     const physicalRuns = swapRuns !== undefined ? swapRuns : runs
-    const runsForRotation = (isExtra && et === 'noBall') ? physicalRuns : physicalRuns + er
+    const runsForRotation = (isExtra && et === 'wide')
+      ? 0  // wide: penalty never rotates strike
+      : (isExtra && et === 'noBall')
+        ? physicalRuns  // no-ball: batsman runs only, no penalty
+        : physicalRuns + er
 
     if (!isWicket && runsForRotation % 2 === 1) {
       ;[newStriker, newNonStriker] = [newNonStriker, newStriker]

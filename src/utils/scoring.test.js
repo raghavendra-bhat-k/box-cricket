@@ -444,15 +444,55 @@ describe('restoreStateFromBalls', () => {
     expect(state.nonStriker).toBe(0)
   })
 
-  it('handles wide (no legal ball count)', () => {
+  it('handles wide (no legal ball count, strike does NOT rotate)', () => {
     const balls = [
       makeBall({ runs: 0, isExtra: true, extraType: 'wide', extraRuns: 1 }),
     ]
     const state = restoreStateFromBalls(balls)
-    // Wide with 1 run = odd, swaps strike
-    expect(state.striker).toBe(1)
-    expect(state.nonStriker).toBe(0)
+    // Wide penalty (extraRuns=1) must NOT rotate strike — batsman never ran
+    expect(state.striker).toBe(0)
+    expect(state.nonStriker).toBe(1)
     expect(state.bowlerIdx).toBe(0) // not a legal ball, no over change
+  })
+
+  it('wide with odd extraRuns does not rotate strike', () => {
+    const balls = [
+      makeBall({ runs: 0, isExtra: true, extraType: 'wide', extraRuns: 3 }),
+    ]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(0)
+    expect(state.nonStriker).toBe(1)
+  })
+
+  it('wide with even extraRuns does not rotate strike', () => {
+    const balls = [
+      makeBall({ runs: 0, isExtra: true, extraType: 'wide', extraRuns: 2 }),
+    ]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(0)
+    expect(state.nonStriker).toBe(1)
+  })
+
+  it('consecutive wides do not accumulate wrong rotations', () => {
+    // Three wides (er=1 each) in a row — striker must not move at all
+    const balls = [
+      makeBall({ runs: 0, isExtra: true, extraType: 'wide', extraRuns: 1 }),
+      makeBall({ runs: 0, isExtra: true, extraType: 'wide', extraRuns: 1 }),
+      makeBall({ runs: 0, isExtra: true, extraType: 'wide', extraRuns: 1 }),
+    ]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(0)
+    expect(state.nonStriker).toBe(1)
+  })
+
+  it('wide followed by a single rotates correctly on the single only', () => {
+    const balls = [
+      makeBall({ runs: 0, isExtra: true, extraType: 'wide', extraRuns: 1 }),
+      makeBall({ runs: 1, tapRuns: 1 }), // single — rotate
+    ]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(1) // rotated by the single
+    expect(state.nonStriker).toBe(0)
   })
 
   it('handles no-ball (no legal ball count)', () => {
@@ -629,15 +669,16 @@ describe('restoreStateFromBalls — batsman scoring scenarios', () => {
     expect(state.nonStriker).toBe(1)
   })
 
-  it('wide rotates strike on odd extra runs', () => {
+  it('wide never rotates strike regardless of extra runs', () => {
+    // Wide penalty (extraRuns=1) must NOT rotate strike
     const balls = [
       makeBall({ runs: 0, isExtra: true, extraType: 'wide', extraRuns: 1 }),
     ]
     const state = restoreStateFromBalls(balls)
-    expect(state.striker).toBe(1)
+    expect(state.striker).toBe(0)
   })
 
-  it('wide does not rotate strike on even extra runs', () => {
+  it('wide with even extra runs also does not rotate strike', () => {
     const balls = [
       makeBall({ runs: 0, isExtra: true, extraType: 'wide', extraRuns: 2 }),
     ]
