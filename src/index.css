@@ -931,6 +931,36 @@ body {
   color: var(--green-dark);
 }
 
+/* End-of-over reconciliation line */
+.ball-log-over {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green-dark);
+  background: color-mix(in srgb, var(--green-dark) 12%, transparent);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.ball-log-over .over-runs {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ball-log-over .over-bowler {
+  font-weight: 600;
+  color: var(--text-light);
+}
+
+.ball-log-over .over-score {
+  margin-left: auto;
+  font-size: 13px;
+}
+
 .ball-log-empty {
   color: var(--text-light);
   font-size: 14px;
