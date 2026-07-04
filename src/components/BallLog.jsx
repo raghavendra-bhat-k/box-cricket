@@ -17,22 +17,44 @@ function buildRows(balls, battingTeam, bowlingTeam) {
   let runs = 0
   let wickets = 0
   let legalBalls = 0
+  let overStartRuns = 0
+  let overStartWickets = 0
+  const rows = []
 
-  return balls.map((ball, index) => {
+  balls.forEach((ball, index) => {
     const isLegal = !ball.isExtra || (ball.extraType !== 'wide' && ball.extraType !== 'noBall')
     if (isLegal) legalBalls++
     runs += ball.runs + (ball.extraRuns || 0)
     if (ball.isWicket) wickets++
 
-    return {
+    rows.push({
+      type: 'ball',
       key: ball.uid || ball.id || index,
       over: isLegal ? formatOvers(legalBalls) : `${Math.floor(legalBalls / 6)}.${legalBalls % 6}+`,
       display: ballDisplay(ball),
       score: `${runs}/${wickets}`,
       batter: ball.batsmanIndex != null ? getBatterName(battingTeam, ball.batsmanIndex) : '-',
       bowler: ball.bowlerIndex != null ? getBowlerName(ball, bowlingTeam) : '-',
+    })
+
+    // End-of-over summary line so a human can reconcile the score at each over.
+    if (isLegal && legalBalls % 6 === 0) {
+      const overNumber = legalBalls / 6
+      rows.push({
+        type: 'over',
+        key: `over-${overNumber}`,
+        overNumber,
+        score: `${runs}/${wickets}`,
+        runsInOver: runs - overStartRuns,
+        wicketsInOver: wickets - overStartWickets,
+        bowler: ball.bowlerIndex != null ? getBowlerName(ball, bowlingTeam) : '-',
+      })
+      overStartRuns = runs
+      overStartWickets = wickets
     }
   })
+
+  return rows
 }
 
 export default function BallLog({ match, inningsBalls }) {
@@ -71,13 +93,25 @@ export default function BallLog({ match, inningsBalls }) {
               <span>Bowler</span>
             </div>
             {buildRows(section.balls, section.battingTeam, section.bowlingTeam).map(row => (
-              <div key={row.key} className="ball-log-row">
-                <span>{row.over}</span>
-                <strong>{row.display}</strong>
-                <span>{row.score}</span>
-                <span>{row.batter}</span>
-                <span>{row.bowler}</span>
-              </div>
+              row.type === 'over' ? (
+                <div key={row.key} className="ball-log-over">
+                  <span className="over-label">End of Over {row.overNumber}</span>
+                  <span className="over-runs">
+                    +{row.runsInOver} run{row.runsInOver !== 1 ? 's' : ''}
+                    {row.wicketsInOver > 0 ? `, ${row.wicketsInOver} wkt${row.wicketsInOver !== 1 ? 's' : ''}` : ''}
+                  </span>
+                  <span className="over-bowler">{row.bowler}</span>
+                  <span className="over-score">{row.score}</span>
+                </div>
+              ) : (
+                <div key={row.key} className="ball-log-row">
+                  <span>{row.over}</span>
+                  <strong>{row.display}</strong>
+                  <span>{row.score}</span>
+                  <span>{row.batter}</span>
+                  <span>{row.bowler}</span>
+                </div>
+              )
             ))}
           </div>
         </section>

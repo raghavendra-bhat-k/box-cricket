@@ -30,6 +30,44 @@ describe('BallLog', () => {
     expect(screen.getAllByText('Charlie')).toHaveLength(2)
   })
 
+  it('adds an end-of-over summary line with the cumulative score', () => {
+    // One full over: 3 + wide(1) + 4 + 0 + 6 + 1(wicket... no, keep simple) = mix
+    const overBalls = [
+      { uid: 'o1', innings: 1, runs: 3, isExtra: false, extraRuns: 0, isWicket: false, batsmanIndex: 0, bowlerIndex: 0, bowlerName: 'Sachin' },
+      { uid: 'o2', innings: 1, runs: 0, extraRuns: 1, isExtra: true, extraType: 'wide', isWicket: false, batsmanIndex: 0, bowlerIndex: 0, bowlerName: 'Sachin' },
+      { uid: 'o3', innings: 1, runs: 4, isExtra: false, extraRuns: 0, isWicket: false, batsmanIndex: 0, bowlerIndex: 0, bowlerName: 'Sachin' },
+      { uid: 'o4', innings: 1, runs: 0, isExtra: false, extraRuns: 0, isWicket: true, dismissalType: 'bowled', batsmanIndex: 0, bowlerIndex: 0, bowlerName: 'Sachin' },
+      { uid: 'o5', innings: 1, runs: 6, isExtra: false, extraRuns: 0, isWicket: false, batsmanIndex: 1, bowlerIndex: 0, bowlerName: 'Sachin' },
+      { uid: 'o6', innings: 1, runs: 1, isExtra: false, extraRuns: 0, isWicket: false, batsmanIndex: 1, bowlerIndex: 0, bowlerName: 'Sachin' },
+      { uid: 'o7', innings: 1, runs: 0, isExtra: false, extraRuns: 0, isWicket: false, batsmanIndex: 0, bowlerIndex: 0, bowlerName: 'Sachin' },
+    ]
+    render(<BallLog match={match} inningsBalls={{ 1: overBalls, 2: [] }} />)
+
+    // Summary appears once after the 6th legal ball (the trailing 7th ball has no summary).
+    const overLine = screen.getByText('End of Over 1').closest('.ball-log-over')
+    expect(overLine).toBeInTheDocument()
+    // 6 legal balls: 3 + 1(wide) + 4 + 0 + 6 + 1 = 15 runs, 1 wicket at end of over.
+    expect(overLine.textContent).toMatch(/\+15 runs/)
+    expect(overLine.textContent).toMatch(/1 wkt/)
+    expect(overLine.textContent).toMatch(/15\/1/)
+    expect(overLine.textContent).toMatch(/Sachin/)
+  })
+
+  it('does not add an over summary for an incomplete over', () => {
+    render(
+      <BallLog
+        match={match}
+        inningsBalls={{
+          1: [
+            { uid: 'p1', innings: 1, runs: 4, isExtra: false, extraRuns: 0, isWicket: false, batsmanIndex: 0, bowlerIndex: 0 },
+            { uid: 'p2', innings: 1, runs: 1, isExtra: false, extraRuns: 0, isWicket: false, batsmanIndex: 0, bowlerIndex: 0 },
+          ],
+        }}
+      />
+    )
+    expect(screen.queryByText(/End of Over/)).not.toBeInTheDocument()
+  })
+
   it('shows an empty state when there are no deliveries', () => {
     render(<BallLog match={match} inningsBalls={{ 1: [], 2: [] }} />)
 
