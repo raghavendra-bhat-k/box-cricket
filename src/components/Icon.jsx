@@ -62,6 +62,7 @@ const PATHS = {
       <path d="M8.6 13.3l6.8 4.4" />
     </>
   ),
+  chevron: <path d="M9 18l6-6-6-6" />,
   // Cricket stumps + ball — brand mark. Uses currentColor so it recolors with the palette.
   logo: (
     <>
@@ -74,10 +75,10 @@ const PATHS = {
   ),
 }
 
-export default function Icon({ name, label, size = 16 }) {
+export default function Icon({ name, label, size = 16, className = '' }) {
   return (
     <svg
-      className="icon"
+      className={className ? `icon ${className}` : 'icon'}
       width={size}
       height={size}
       viewBox="0 0 24 24"
