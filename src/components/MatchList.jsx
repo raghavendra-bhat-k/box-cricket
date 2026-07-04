@@ -115,7 +115,7 @@ export default function MatchList({
                 onClick={() => setExpanded(prev => ({ ...prev, [group.key]: !isExpanded }))}
                 aria-expanded={isExpanded}
               >
-                <span className="chevron">{isExpanded ? 'v' : '>'}</span>
+                <Icon name="chevron" className={`chevron${isExpanded ? ' expanded' : ''}`} />
                 <span>
                   <strong>{group.title}</strong>
                   <small>{group.subtitle} - {group.matches.length} match{group.matches.length !== 1 ? 'es' : ''}</small>
