@@ -33,6 +33,11 @@ export default function Scorecard({ matchId, onBack, onResume, onShareSync }) {
 
   function getPlayerName(team, index, role) {
     const t = team === 'A' ? match.teamA : match.teamB
+    // Bowlers: prefer the bowling rotation slot so legacy index-keyed rows resolve
+    // to the bowler, not the batting-roster name at that index.
+    if (role === 'Bowl') {
+      return t.bowlingOrder?.[index] || t.players?.[index] || `Bowl ${index + 1}`
+    }
     return t.players?.[index] || `${role} ${index + 1}`
   }
 

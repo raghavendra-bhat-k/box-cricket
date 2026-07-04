@@ -622,9 +622,19 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
           <span className="name">{getPlayerName('bat', nonStriker)}</span>: {score.batsmen[nonStriker]?.runs || 0} ({score.batsmen[nonStriker]?.balls || 0})
         </div>
         <div className="player-info" style={{ marginTop: 4 }}>
-          <span className="name" style={{ cursor: 'pointer', textDecoration: 'underline dotted', color: 'var(--green-dark)' }} onClick={openBowlerSelect}>
-            {getPlayerName('bowl', bowlerIdx)}
-          </span>: {score.bowlers[bowlerIdx] ? `${formatOvers(score.bowlers[bowlerIdx].balls)}-${score.bowlers[bowlerIdx].runs}-${score.bowlers[bowlerIdx].wickets}` : '0.0-0-0'}
+          {(() => {
+            // calculateScore keys bowler stats by name (ball.bowlerName) when present,
+            // falling back to the integer index for legacy balls — look up both.
+            const curBowlName = getPlayerName('bowl', bowlerIdx)
+            const bowlStat = score.bowlers[curBowlName] ?? score.bowlers[bowlerIdx]
+            return (
+              <>
+                <span className="name" style={{ cursor: 'pointer', textDecoration: 'underline dotted', color: 'var(--green-dark)' }} onClick={openBowlerSelect}>
+                  {curBowlName}
+                </span>: {bowlStat ? `${formatOvers(bowlStat.balls)}-${bowlStat.runs}-${bowlStat.wickets}` : '0.0-0-0'}
+              </>
+            )
+          })()}
         </div>
       </div>
 

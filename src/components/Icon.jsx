@@ -62,6 +62,16 @@ const PATHS = {
       <path d="M8.6 13.3l6.8 4.4" />
     </>
   ),
+  // Cricket stumps + ball — brand mark. Uses currentColor so it recolors with the palette.
+  logo: (
+    <>
+      <path d="M8 8v12" />
+      <path d="M12 8v12" />
+      <path d="M16 8v12" />
+      <path d="M7.5 8h9" />
+      <circle cx="19" cy="5.5" r="2.5" />
+    </>
+  ),
 }
 
 export default function Icon({ name, label, size = 16 }) {

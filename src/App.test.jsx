@@ -28,6 +28,30 @@ describe('App - navigation', () => {
     })
   })
 
+  it('renders the palette-driven brand logo mark', () => {
+    render(<App />)
+    // The logo is an accessible SVG mark beside the title.
+    expect(screen.getByTitle('Box Cricket logo')).toBeInTheDocument()
+  })
+
+  it('syncs the browser status-bar color to the selected palette', async () => {
+    const meta = document.createElement('meta')
+    meta.setAttribute('name', 'theme-color')
+    document.head.appendChild(meta)
+    try {
+      render(<App />)
+      const palette = screen.getByLabelText('Palette')
+
+      // Default palette (royal) primary colour.
+      await waitFor(() => expect(meta.getAttribute('content')).toBe('#991b1b'))
+
+      fireEvent.change(palette, { target: { value: 'classic' } })
+      await waitFor(() => expect(meta.getAttribute('content')).toBe('#1a472a'))
+    } finally {
+      document.head.removeChild(meta)
+    }
+  })
+
   it('navigates to new match screen', () => {
     render(<App />)
     fireEvent.click(screen.getByText('New Match'))

@@ -86,6 +86,27 @@ describe('Scorecard', () => {
     })
   })
 
+  it('names bowlers from bowlingOrder for legacy index-keyed balls (export handoff)', async () => {
+    // Mirrors the tournament export: bowling order was changed to Sachin before any
+    // ball, and imported balls carry only bowlerIndex (bowlerName stripped on export).
+    const id = await createMatch({
+      teamA: 'Batters',
+      teamB: 'Bowlers',
+      totalOvers: 6,
+      playersPerSide: 6,
+      teamAPlayers: ['Amar'],
+      teamBPlayers: ['Adarsha', 'Nikhil'],
+      teamBBowlingOrder: ['Sachin', 'Nikhil'],
+    })
+    await addBall({ matchId: id, innings: 1, over: 0, ballInOver: 0, runs: 6, isExtra: false, extraType: null, extraRuns: 0, isWicket: false, dismissalType: null, batsmanIndex: 0, bowlerIndex: 0 })
+    render(<Scorecard matchId={id} onBack={onBack} onResume={onResume} />)
+
+    await waitFor(() => expect(screen.getByText('Bowler')).toBeInTheDocument())
+    // Bowler must show Sachin (bowlingOrder[0]), never Adarsha (players[0]).
+    expect(screen.getByText('Sachin')).toBeInTheDocument()
+    expect(screen.queryByText('Adarsha')).not.toBeInTheDocument()
+  })
+
   it('shows extras summary', async () => {
     const id = await setupMatch()
     render(<Scorecard matchId={id} onBack={onBack} onResume={onResume} />)

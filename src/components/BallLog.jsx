@@ -1,7 +1,16 @@
 import { ballDisplay, formatOvers } from '../utils/scoring'
 
-function getPlayerName(team, index, fallback) {
-  return team?.players?.[index] || `${fallback} ${index + 1}`
+function getBatterName(team, index) {
+  return team?.players?.[index] || `Bat ${index + 1}`
+}
+
+// Bowler identity: prefer the name frozen on the ball, then the bowling rotation
+// slot, then the batting roster, so it survives export (which drops bowlerName)
+// and never falls back to the wrong team's batting name.
+function getBowlerName(ball, team) {
+  if (ball.bowlerName) return ball.bowlerName
+  const idx = ball.bowlerIndex
+  return team?.bowlingOrder?.[idx] || team?.players?.[idx] || `Bowl ${idx + 1}`
 }
 
 function buildRows(balls, battingTeam, bowlingTeam) {
@@ -20,8 +29,8 @@ function buildRows(balls, battingTeam, bowlingTeam) {
       over: isLegal ? formatOvers(legalBalls) : `${Math.floor(legalBalls / 6)}.${legalBalls % 6}+`,
       display: ballDisplay(ball),
       score: `${runs}/${wickets}`,
-      batter: ball.batsmanIndex != null ? getPlayerName(battingTeam, ball.batsmanIndex, 'Bat') : '-',
-      bowler: ball.bowlerIndex != null ? getPlayerName(bowlingTeam, ball.bowlerIndex, 'Bowl') : '-',
+      batter: ball.batsmanIndex != null ? getBatterName(battingTeam, ball.batsmanIndex) : '-',
+      bowler: ball.bowlerIndex != null ? getBowlerName(ball, bowlingTeam) : '-',
     }
   })
 }

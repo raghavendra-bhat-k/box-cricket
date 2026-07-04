@@ -24,6 +24,7 @@ export default function DragList({ items, onChange, renderItem }) {
     let timer = null
     let activeIdx = null
     let startPos = null
+    let capturedId = null
 
     function getRows() {
       return Array.from(el.querySelectorAll('[data-drag-row]'))
@@ -38,7 +39,10 @@ export default function DragList({ items, onChange, renderItem }) {
       return rows.length
     }
 
-    function onTouchStart(e) {
+    // Pointer Events unify mouse, touch and pen so hold-drag works on laptop and Android.
+    function onPointerDown(e) {
+      // Left mouse button only; touch/pen report button 0 too.
+      if (e.button != null && e.button !== 0) return
       const handle = e.target.closest('.drag-handle')
       if (!handle) return
       const row = handle.closest('[data-drag-row]')
@@ -46,22 +50,22 @@ export default function DragList({ items, onChange, renderItem }) {
       const idx = getRows().indexOf(row)
       if (idx === -1) return
 
-      const touch = e.touches[0]
-      startPos = { x: touch.clientX, y: touch.clientY }
+      startPos = { x: e.clientX, y: e.clientY }
+      capturedId = e.pointerId
 
       timer = setTimeout(() => {
         timer = null
         activeIdx = idx
+        try { el.setPointerCapture(capturedId) } catch { /* capture is best-effort */ }
         setDrag({ idx, ghostY: startPos.y })
         setInsertAtSync(idx)
       }, 280)
     }
 
-    function onTouchMove(e) {
-      const touch = e.touches[0]
+    function onPointerMove(e) {
       if (timer !== null) {
-        const dx = Math.abs(touch.clientX - startPos.x)
-        const dy = Math.abs(touch.clientY - startPos.y)
+        const dx = Math.abs(e.clientX - startPos.x)
+        const dy = Math.abs(e.clientY - startPos.y)
         if (dx > 7 || dy > 7) {
           clearTimeout(timer)
           timer = null
@@ -70,13 +74,17 @@ export default function DragList({ items, onChange, renderItem }) {
       }
       if (activeIdx === null) return
       e.preventDefault()
-      const clientY = touch.clientY
+      const clientY = e.clientY
       setDrag(prev => prev ? { ...prev, ghostY: clientY } : null)
       setInsertAtSync(computeInsert(clientY))
     }
 
-    function onTouchEnd() {
+    function onPointerUp() {
       if (timer !== null) { clearTimeout(timer); timer = null }
+      if (capturedId !== null) {
+        try { el.releasePointerCapture(capturedId) } catch { /* already released */ }
+        capturedId = null
+      }
       if (activeIdx === null) return
 
       const fromIdx = activeIdx
@@ -93,17 +101,17 @@ export default function DragList({ items, onChange, renderItem }) {
       }
     }
 
-    el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: false })
-    el.addEventListener('touchend', onTouchEnd)
-    el.addEventListener('touchcancel', onTouchEnd)
+    el.addEventListener('pointerdown', onPointerDown)
+    el.addEventListener('pointermove', onPointerMove)
+    el.addEventListener('pointerup', onPointerUp)
+    el.addEventListener('pointercancel', onPointerUp)
 
     return () => {
       if (timer) clearTimeout(timer)
-      el.removeEventListener('touchstart', onTouchStart)
-      el.removeEventListener('touchmove', onTouchMove)
-      el.removeEventListener('touchend', onTouchEnd)
-      el.removeEventListener('touchcancel', onTouchEnd)
+      el.removeEventListener('pointerdown', onPointerDown)
+      el.removeEventListener('pointermove', onPointerMove)
+      el.removeEventListener('pointerup', onPointerUp)
+      el.removeEventListener('pointercancel', onPointerUp)
     }
   }, []) // stable: reads via refs
 
