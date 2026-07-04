@@ -15,6 +15,14 @@ import {
   shareOrDownloadPayload,
 } from './utils/sync'
 
+// Primary (--green-dark) colour per palette — drives the browser status bar.
+const THEME_COLORS = {
+  royal: '#991b1b',
+  classic: '#1a472a',
+  sky: '#075985',
+  sunset: '#9a3412',
+}
+
 export default function App() {
   const [theme, setTheme] = useState(() => {
     try {
@@ -33,6 +41,9 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
+    // Keep the browser/PWA status bar in sync with the palette's primary colour.
+    const meta = document.querySelector('meta[name="theme-color"]')
+    if (meta) meta.setAttribute('content', THEME_COLORS[theme] || THEME_COLORS.royal)
     try {
       if (typeof localStorage?.setItem === 'function') localStorage.setItem('boxCricketTheme', theme)
     } catch {
@@ -125,7 +136,10 @@ export default function App() {
   return (
     <div className="container">
       <div className="home-header">
-        <h1 className="app-title">Box Cricket</h1>
+        <div className="app-brand">
+          <Icon name="logo" size={30} label="Box Cricket logo" />
+          <h1 className="app-title">Box Cricket</h1>
+        </div>
         <div className="theme-picker">
           <label htmlFor="theme-select">Palette</label>
           <select id="theme-select" value={theme} onChange={e => setTheme(e.target.value)}>

@@ -1042,6 +1042,30 @@ describe('Scoring - resume restores state from ball history', () => {
     // Should render without crashing with restored state
     expect(screen.getByText(/Team A/)).toBeInTheDocument()
   })
+
+  it('shows the current bowler figures (name-keyed) during the 2nd over, not 0.0-0-0', async () => {
+    // Regression: calculateScore keys bowler stats by ball.bowlerName, but the live
+    // display used to look them up by integer index → figures showed 0.0-0-0.
+    const id = await createTestMatch({
+      totalOvers: 6,
+      teamBBowlingOrder: ['Sachin', 'Nikhil', 'Iris', 'Jack', 'Kate', 'Leo'],
+    })
+    // Over 1: 6 dot balls by Sachin (bowlerIndex 0)
+    for (let i = 0; i < 6; i++) {
+      await addBall({ matchId: id, innings: 1, batsmanIndex: 0, bowlerIndex: 0, bowlerName: 'Sachin', runs: 0, isExtra: false, isWicket: false })
+    }
+    // Over 2, ball 1: Nikhil (bowlerIndex 1) concedes 4
+    await addBall({ matchId: id, innings: 1, batsmanIndex: 1, bowlerIndex: 1, bowlerName: 'Nikhil', runs: 4, isExtra: false, isWicket: false })
+
+    renderScoring(id)
+
+    // The bowler line is the .player-info div containing the current bowler's name.
+    const bowlerLine = await screen.findByText(
+      (_, el) => el?.className === 'player-info' && /Nikhil/.test(el?.textContent || '')
+    )
+    expect(bowlerLine.textContent).toMatch(/Nikhil:\s*0\.1-4-0/)
+    expect(bowlerLine.textContent).not.toMatch(/0\.0-0-0/)
+  })
 })
 
 // ─── Per-team player count / all-out ────────────────────────────

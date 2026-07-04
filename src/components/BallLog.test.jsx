@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import BallLog from './BallLog'
+import tournamentExport from '../test/fixtures/tournament-export.json'
 
 const match = {
   teamA: { name: 'Tigers', players: ['Alice', 'Bob'] },
@@ -33,5 +34,60 @@ describe('BallLog', () => {
     render(<BallLog match={match} inningsBalls={{ 1: [], 2: [] }} />)
 
     expect(screen.getByText('No deliveries recorded yet.')).toBeInTheDocument()
+  })
+
+  it('resolves the bowler from bowlingOrder, not the batting roster', () => {
+    // teamB.bowlingOrder[0]='Sachin' while teamB.players[0]='Adarsha'. A ball with
+    // an explicit bowlerName must show that name over both.
+    const boMatch = {
+      teamA: { name: 'Bat', players: ['Amar'] },
+      teamB: { name: 'Bowl', players: ['Adarsha', 'Nikhil'], bowlingOrder: ['Sachin', 'Nikhil'] },
+    }
+    render(
+      <BallLog
+        match={boMatch}
+        inningsBalls={{
+          1: [
+            { uid: 'x1', innings: 1, runs: 6, isExtra: false, extraRuns: 0, isWicket: false, batsmanIndex: 0, bowlerIndex: 0, bowlerName: 'Sachin' },
+          ],
+        }}
+      />
+    )
+
+    expect(screen.getByText('Sachin')).toBeInTheDocument()
+    expect(screen.queryByText('Adarsha')).not.toBeInTheDocument()
+  })
+
+  it('resolves the bowler from bowlingOrder for real exported data (bowlerName stripped)', () => {
+    // The tournament export drops bowlerName; over 1 (bowlerIndex 0) must still show
+    // Sachin (bowlingOrder[0]), not Adarsha (players[0]); over 2 shows Nikhil.
+    const exportedMatch = tournamentExport.matches[0]
+    const innings1 = tournamentExport.balls.filter(b => b.innings === 1)
+    // Sanity: the fixture genuinely has no bowlerName so this exercises the fallback.
+    expect(innings1.some(b => b.bowlerName !== undefined)).toBe(false)
+
+    render(<BallLog match={exportedMatch} inningsBalls={{ 1: innings1, 2: [] }} />)
+
+    expect(screen.getAllByText('Sachin').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Nikhil').length).toBeGreaterThan(0)
+    // "Adarsha" is players[0] of the bowling team — it must never surface as a bowler.
+    expect(screen.queryByText('Adarsha')).not.toBeInTheDocument()
+  })
+
+  it('falls back to players when neither bowlerName nor bowlingOrder is present (legacy)', () => {
+    const legacyMatch = {
+      teamA: { name: 'Bat', players: ['Amar'] },
+      teamB: { name: 'Bowl', players: ['Adarsha'] },
+    }
+    render(
+      <BallLog
+        match={legacyMatch}
+        inningsBalls={{
+          1: [{ uid: 'l1', innings: 1, runs: 1, isExtra: false, extraRuns: 0, isWicket: false, batsmanIndex: 0, bowlerIndex: 0 }],
+        }}
+      />
+    )
+
+    expect(screen.getByText('Adarsha')).toBeInTheDocument()
   })
 })

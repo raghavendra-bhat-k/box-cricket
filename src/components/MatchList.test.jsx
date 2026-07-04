@@ -3,6 +3,15 @@ import { render, screen, waitFor, fireEvent, within } from '@testing-library/rea
 import MatchList from './MatchList'
 import db from '../db'
 
+// Match the component's formatGroupDate output regardless of the runner's locale
+// (e.g. en-IN renders "Sat, 20 Jun, 2026" vs en-US "Sat, Jun 20, 2026").
+const jun20Label = new Date(2026, 5, 20).toLocaleDateString(undefined, {
+  weekday: 'short',
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+})
+
 const onResume = vi.fn()
 const onView = vi.fn()
 const onRematch = vi.fn()
@@ -135,7 +144,7 @@ describe('MatchList - sync export buttons', () => {
 
     await waitFor(() => screen.getByText('Sync A vs Sync B'))
     const tournamentGroup = screen.getByText('Summer Cup').closest('.match-group')
-    const dayGroup = screen.getByText('Sat, Jun 20, 2026').closest('.match-group')
+    const dayGroup = screen.getByText(jun20Label).closest('.match-group')
     fireEvent.click(within(tournamentGroup).getAllByText('Export')[0])
     fireEvent.click(within(dayGroup).getByText('Export'))
     fireEvent.click(within(tournamentGroup).getAllByText('Export')[1])
@@ -173,7 +182,7 @@ describe('MatchList - sync export buttons', () => {
 
     await waitFor(() => screen.getByText('Today A vs Today B'))
     expect(screen.queryByText('Old A vs Old B')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('Sat, Jun 20, 2026'))
+    fireEvent.click(screen.getByText(jun20Label))
     expect(screen.getByText('Old A vs Old B')).toBeInTheDocument()
   })
 
@@ -214,7 +223,7 @@ describe('MatchList - sync export buttons', () => {
     render(<MatchList onResume={onResume} onView={onView} onRematch={onRematch} onDeleteDay={onDeleteDay} />)
 
     await waitFor(() => screen.getByText('Day Delete A vs Day Delete B'))
-    const group = screen.getByText('Sat, Jun 20, 2026').closest('.match-group')
+    const group = screen.getByText(jun20Label).closest('.match-group')
     fireEvent.click(within(group).getAllByText('Delete')[0])
 
     expect(onDeleteDay).toHaveBeenCalledWith('2026-06-20')
