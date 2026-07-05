@@ -198,6 +198,50 @@ describe('Scoring - wicket with runs', () => {
     })
   })
 
+  it('prompts to change bowler when a wicket falls on the last ball of an over', async () => {
+    const id = await createTestMatch({ totalOvers: 6 })
+    // 5 legal dot balls, so the wicket becomes the 6th (last) ball of the over.
+    for (let i = 0; i < 5; i++) {
+      await addBall({
+        matchId: id, innings: 1, over: 0, ballInOver: i, runs: 0,
+        isExtra: false, extraType: null, extraRuns: 0,
+        isWicket: false, dismissalType: null, batsmanIndex: 0, bowlerIndex: 0,
+      })
+    }
+    renderScoring(id)
+    await waitFor(() => screen.getByText('W'))
+
+    fireEvent.click(screen.getByText('W'))
+    await waitFor(() => screen.getByText('Bowled'))
+    fireEvent.click(screen.getByText('Bowled'))
+    await waitFor(() => screen.getByText('Confirm'))
+    fireEvent.click(screen.getByText('Confirm'))
+
+    // The over-end bowler-change reminder must appear even though a wicket fell.
+    await waitFor(() => expect(screen.getByText(/Over done/)).toBeInTheDocument())
+  })
+
+  it('persists the chosen incoming batsman on the wicket ball for a clean resume', async () => {
+    const id = await createTestMatch()
+    renderScoring(id)
+    await waitFor(() => screen.getByText('W'))
+
+    fireEvent.click(screen.getByText('W'))
+    await waitFor(() => screen.getByText('Bowled'))
+    fireEvent.click(screen.getByText('Bowled'))
+    await waitFor(() => screen.getByText('Confirm'))
+    fireEvent.click(screen.getByText('Confirm'))
+
+    // Pick a non-default incoming batsman (Frank, index 5) from the "Who's next?" sheet.
+    await waitFor(() => screen.getByText("Who's batting next?"))
+    fireEvent.click(screen.getByText('Frank'))
+
+    await waitFor(async () => {
+      const balls = await getBalls(id, 1)
+      expect(balls[0].newBatsmanIndex).toBe(5)
+    })
+  })
+
   it('wicket defaults to 0 runs', async () => {
     const id = await createTestMatch()
     renderScoring(id)

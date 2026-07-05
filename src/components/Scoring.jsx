@@ -16,6 +16,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
   const [sheet, setSheet] = useState(null) // 'wicket' | 'extras' | 'menu' | 'editBall' | 'addPlayer' | 'editNames' | 'changeTeamSizes' | 'changeOvers' | 'removePlayer' | 'bowlerSelect' | 'nextBatsman'
   const [pendingWicketNextStriker, setPendingWicketNextStriker] = useState(null) // new batsman index after wicket
   const [pendingWicketEnd, setPendingWicketEnd] = useState('striker') // end the new batsman occupies
+  const [pendingWicketBallId, setPendingWicketBallId] = useState(null) // wicket ball to stamp with the chosen batsman
   const [pendingBowlerIdx, setPendingBowlerIdx] = useState(null)
   const [editBowlerName, setEditBowlerName] = useState('')
   const [bowlerSearch, setBowlerSearch] = useState('')
@@ -152,7 +153,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
       bowlerName: getPlayerName('bowl', bowlerIdx),
     }
 
-    await addBall(ball)
+    const ballId = await addBall(ball)
 
     // Compute new positions with local variables to avoid stale closure bugs
     let newStriker = striker
@@ -193,6 +194,12 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
     // Which end the incoming batsman now occupies (after the over-end swap).
     const newBatsmanEnd = newStriker === autoNextStriker ? 'striker' : 'nonStriker'
 
+    // Persist the incoming batsman's index on the wicket ball so a refresh/resume
+    // restores the correct batsman (the scorer may override this via the picker).
+    if (isWicket) {
+      await updateBall(ballId, { newBatsmanIndex: autoNextStriker })
+    }
+
     setStriker(newStriker)
     setNonStriker(newNonStriker)
     setBowlerIdx(newBowlerIdx)
@@ -214,17 +221,22 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
       } else {
         await endMatch(newScore)
       }
-    } else if (isWicket && !newIsAllOut) {
-      // Show "Who's next?" picker if batting team has named players beyond auto-next index
-      const namedPlayers = battingTeam.players || []
-      if (namedPlayers.length > autoNextStriker) {
-        setPendingWicketNextStriker(autoNextStriker)
-        setPendingWicketEnd(newBatsmanEnd)
-        setSheet('nextBatsman')
+    } else {
+      if (isWicket && !newIsAllOut) {
+        // Show "Who's next?" picker if batting team has named players beyond auto-next index
+        const namedPlayers = battingTeam.players || []
+        if (namedPlayers.length > autoNextStriker) {
+          setPendingWicketNextStriker(autoNextStriker)
+          setPendingWicketEnd(newBatsmanEnd)
+          setPendingWicketBallId(ballId)
+          setSheet('nextBatsman')
+        }
       }
-    } else if (overJustEnded) {
-      // Non-blocking: show a banner to remind scorer to change bowler
-      setBowlerChangePending(true)
+      if (overJustEnded) {
+        // Non-blocking banner to remind the scorer to change bowler — shown even
+        // when a wicket also fell on the last ball (both prompts can apply).
+        setBowlerChangePending(true)
+      }
     }
   }
 
@@ -1258,7 +1270,9 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
                     onClick={() => {
                       if (pendingWicketEnd === 'nonStriker') setNonStriker(i)
                       else setStriker(i)
+                      if (pendingWicketBallId != null) updateBall(pendingWicketBallId, { newBatsmanIndex: i })
                       setPendingWicketNextStriker(null)
+                      setPendingWicketBallId(null)
                       setSheet(null)
                     }}
                   >
@@ -1271,8 +1285,10 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
             <button
               className="sheet-cancel"
               onClick={() => {
-                // The auto batsman is already placed at the correct end by recordBall.
+                // The auto batsman is already placed at the correct end by recordBall
+                // and its index was already persisted on the wicket ball.
                 setPendingWicketNextStriker(null)
+                setPendingWicketBallId(null)
                 setSheet(null)
               }}
             >

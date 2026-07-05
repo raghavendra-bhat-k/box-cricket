@@ -82,6 +82,19 @@ describe('JSON sync utilities', () => {
     expect(payload.balls[0].bowlerName).toBe('Sachin')
   })
 
+  it('preserves outBatsmanIndex and newBatsmanIndex through export', async () => {
+    const id = await createMatch({ teamA: 'Tigers', teamB: 'Lions', totalOvers: 6, playersPerSide: 6 })
+    await addBall({
+      matchId: id, innings: 1, over: 0, ballInOver: 0, runs: 0,
+      isExtra: false, extraType: null, extraRuns: 0,
+      isWicket: true, dismissalType: 'run out',
+      batsmanIndex: 0, outBatsmanIndex: 1, newBatsmanIndex: 4, bowlerIndex: 0,
+    })
+    const payload = await exportMatchPayload(id)
+    expect(payload.balls[0].outBatsmanIndex).toBe(1)
+    expect(payload.balls[0].newBatsmanIndex).toBe(4)
+  })
+
   it('exports only matches for the requested day', async () => {
     await createScoredMatch({ teamA: 'Today A', teamB: 'Today B' })
     const oldId = await createScoredMatch({ teamA: 'Old A', teamB: 'Old B' })

@@ -163,12 +163,33 @@ export function ballDisplay(ball) {
   return String(ball.runs);
 }
 
-// Reconstruct striker, nonStriker, bowlerIdx from ball history (for resume)
+// Lowest batting index that is neither out nor currently at the crease. Used as a
+// best-effort fallback for the incoming batsman only when it wasn't persisted on
+// the ball (older data) — skips batsmen who are already out (unlike a naive max+1).
+function nextAvailableBatsman(s, ns, outSet) {
+  let i = 0
+  while (i === s || i === ns || outSet.has(i)) i++
+  return i
+}
+
+// Reconstruct striker, nonStriker, bowlerIdx from ball history (for resume).
+// The recorded batsmanIndex on each ball is the ground truth for who was on strike,
+// so we re-sync to it every ball. This keeps the reconstruction correct even when
+// batsmen came in out of order via the "Who's next?" picker.
 export function restoreStateFromBalls(ballHistory) {
   let s = 0, ns = 1, bowler = 0
   let legalBalls = 0
+  const outSet = new Set()
 
   for (const ball of ballHistory) {
+    // Re-sync to ground truth when the recorded striker is a batsman we don't have
+    // at the crease — this happens when someone came in out of order via the
+    // "Who's next?" picker on older data that didn't persist newBatsmanIndex.
+    const bi = ball.batsmanIndex
+    if (bi != null && bi !== s && bi !== ns) {
+      s = bi
+    }
+
     const isLegal = !ball.isExtra || (ball.extraType !== 'wide' && ball.extraType !== 'noBall')
 
     // tapRuns = physical runs before mapping (stored in ball). Fall back to ball.runs for backward compat.
@@ -189,10 +210,13 @@ export function restoreStateFromBalls(ballHistory) {
     }
 
     // Wicket: the new batsman comes in at the end the dismissed batsman vacated.
-    // For run-outs the non-striker can be out, so honour outBatsmanIndex.
+    // For run-outs the non-striker can be out, so honour outBatsmanIndex. The
+    // incoming batsman is taken from the persisted newBatsmanIndex (the scorer's
+    // actual pick) and only falls back to a computed index for older data.
     if (ball.isWicket) {
       const outIdx = ball.outBatsmanIndex ?? ball.batsmanIndex
-      const next = Math.max(s, ns) + 1
+      outSet.add(outIdx)
+      const next = ball.newBatsmanIndex ?? nextAvailableBatsman(s, ns, outSet)
       if (ns === outIdx) ns = next
       else s = next // striker out, or unknown out index
     }
