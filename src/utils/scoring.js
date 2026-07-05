@@ -1,3 +1,10 @@
+// Dismissals credited to the bowler. Run out, retired, obstructing the field and
+// timed out are charged to the team only (not the bowler). A null/undefined type
+// is treated as bowler-credited for backward compatibility with legacy balls.
+const BOWLER_CREDITED_DISMISSALS = new Set([
+  'bowled', 'caught', 'lbw', 'stumped', 'hit wicket',
+])
+
 export function calculateScore(balls) {
   let runs = 0;
   let wickets = 0;
@@ -44,8 +51,17 @@ export function calculateScore(balls) {
       }
       if ((!ball.isExtra || ball.extraType === 'noBall') && ball.runs === 4) batsmen[batKey].fours++;
       if ((!ball.isExtra || ball.extraType === 'noBall') && ball.runs === 6) batsmen[batKey].sixes++;
-      if (ball.isWicket) {
-        batsmen[batKey].howOut = ball.dismissalType || 'out';
+    }
+
+    // Attribute the dismissal to whoever was out — for run-outs this can be the
+    // non-striker, so use outBatsmanIndex when present (falls back to the striker).
+    if (ball.isWicket) {
+      const outKey = ball.outBatsmanIndex ?? ball.batsmanIndex;
+      if (outKey !== undefined) {
+        if (!batsmen[outKey]) {
+          batsmen[outKey] = { runs: 0, balls: 0, fours: 0, sixes: 0, howOut: 'not out' };
+        }
+        batsmen[outKey].howOut = ball.dismissalType || 'out';
       }
     }
 
@@ -59,7 +75,9 @@ export function calculateScore(balls) {
       if (!ball.isExtra || (ball.extraType !== 'wide' && ball.extraType !== 'noBall')) {
         bowlers[bowlKey].balls++;
       }
-      if (ball.isWicket) bowlers[bowlKey].wickets++;
+      if (ball.isWicket && (ball.dismissalType == null || BOWLER_CREDITED_DISMISSALS.has(ball.dismissalType))) {
+        bowlers[bowlKey].wickets++;
+      }
     }
   }
 
@@ -164,23 +182,27 @@ export function restoreStateFromBalls(ballHistory) {
         ? physicalRuns
         : physicalRuns + (ball.extraRuns || 0)
 
-    // Strike rotation for odd runs (excluding wickets)
-    if (!ball.isWicket && runsForSwap % 2 === 1) {
+    // Odd completed runs cross the batsmen — applies to run-outs too (the runs
+    // taken before the run-out physically swap the ends).
+    if (runsForSwap % 2 === 1) {
       ;[s, ns] = [ns, s]
     }
 
-    // Wicket: new batsman comes in at striker's end
+    // Wicket: the new batsman comes in at the end the dismissed batsman vacated.
+    // For run-outs the non-striker can be out, so honour outBatsmanIndex.
     if (ball.isWicket) {
-      s = Math.max(s, ns) + 1
+      const outIdx = ball.outBatsmanIndex ?? ball.batsmanIndex
+      const next = Math.max(s, ns) + 1
+      if (ns === outIdx) ns = next
+      else s = next // striker out, or unknown out index
     }
 
     if (isLegal) legalBalls++
 
-    // End of over: swap strike + new bowler
+    // End of over: strike rotates regardless of a wicket falling on the last ball,
+    // so the not-out batsman takes strike for the next over.
     if (legalBalls > 0 && legalBalls % 6 === 0 && isLegal) {
-      if (!ball.isWicket) {
-        ;[s, ns] = [ns, s]
-      }
+      ;[s, ns] = [ns, s]
       bowler++
     }
   }
