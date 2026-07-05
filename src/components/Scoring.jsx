@@ -14,7 +14,8 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
   const [nonStriker, setNonStriker] = useState(1)
   const [bowlerIdx, setBowlerIdx] = useState(0)
   const [sheet, setSheet] = useState(null) // 'wicket' | 'extras' | 'menu' | 'editBall' | 'addPlayer' | 'editNames' | 'changeTeamSizes' | 'changeOvers' | 'removePlayer' | 'bowlerSelect' | 'nextBatsman'
-  const [pendingWicketNextStriker, setPendingWicketNextStriker] = useState(null) // new striker index after wicket
+  const [pendingWicketNextStriker, setPendingWicketNextStriker] = useState(null) // new batsman index after wicket
+  const [pendingWicketEnd, setPendingWicketEnd] = useState('striker') // end the new batsman occupies
   const [pendingBowlerIdx, setPendingBowlerIdx] = useState(null)
   const [editBowlerName, setEditBowlerName] = useState('')
   const [bowlerSearch, setBowlerSearch] = useState('')
@@ -25,6 +26,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
   const [customExtraInput, setCustomExtraInput] = useState(false)
   const [wicketDismissalType, setWicketDismissalType] = useState(null)
   const [wicketRuns, setWicketRuns] = useState(0)
+  const [wicketOutBatsman, setWicketOutBatsman] = useState(null) // which batsman is out (run-outs)
   const [customWicketInput, setCustomWicketInput] = useState(false)
   const [showInningsBreak, setShowInningsBreak] = useState(false)
   const [inningsEndReason, setInningsEndReason] = useState(null)
@@ -129,7 +131,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
 
   // swapRuns = the original tap value (for strike rotation logic)
   // actualRuns = the mapped value (what gets recorded in the DB)
-  async function recordBall({ runs = 0, swapRuns, isExtra = false, extraType: et = null, extraRuns: er = 0, isWicket = false, dismissalType = null }) {
+  async function recordBall({ runs = 0, swapRuns, isExtra = false, extraType: et = null, extraRuns: er = 0, isWicket = false, dismissalType = null, outBatsmanIndex = null }) {
     setBowlerChangePending(false) // clear banner when new ball is recorded
     const ball = {
       matchId,
@@ -144,6 +146,8 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
       isWicket,
       dismissalType,
       batsmanIndex: striker,
+      // Who was dismissed — for run-outs it can be the non-striker; default striker.
+      outBatsmanIndex: isWicket ? (outBatsmanIndex ?? striker) : undefined,
       bowlerIndex: bowlerIdx,
       bowlerName: getPlayerName('bowl', bowlerIdx),
     }
@@ -162,25 +166,32 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
         ? physicalRuns  // no-ball: batsman runs only, no penalty
         : physicalRuns + er
 
-    if (!isWicket && runsForRotation % 2 === 1) {
+    // Odd completed runs cross the batsmen — including runs taken before a run-out.
+    if (runsForRotation % 2 === 1) {
       ;[newStriker, newNonStriker] = [newNonStriker, newStriker]
     }
 
-    const autoNextStriker = Math.max(newStriker, newNonStriker) + 1
+    // New batsman enters at the end the dismissed batsman vacated (which, after any
+    // crossing above, may be the striker's or the non-striker's end).
+    const autoNextStriker = Math.max(striker, nonStriker) + 1
+    const outIdx = isWicket ? (outBatsmanIndex ?? striker) : null
     if (isWicket) {
-      newStriker = autoNextStriker
+      if (newNonStriker === outIdx) newNonStriker = autoNextStriker
+      else newStriker = autoNextStriker
     }
 
     const isLegal = !isExtra || (et !== 'wide' && et !== 'noBall')
     const newLegalBalls = score.legalBalls + (isLegal ? 1 : 0)
     let overJustEnded = false
     if (newLegalBalls > 0 && newLegalBalls % 6 === 0 && isLegal) {
-      if (!isWicket) {
-        ;[newStriker, newNonStriker] = [newNonStriker, newStriker]
-      }
+      // Strike rotates at the over end even when a wicket fell on the last ball.
+      ;[newStriker, newNonStriker] = [newNonStriker, newStriker]
       newBowlerIdx++
       overJustEnded = true
     }
+
+    // Which end the incoming batsman now occupies (after the over-end swap).
+    const newBatsmanEnd = newStriker === autoNextStriker ? 'striker' : 'nonStriker'
 
     setStriker(newStriker)
     setNonStriker(newNonStriker)
@@ -208,6 +219,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
       const namedPlayers = battingTeam.players || []
       if (namedPlayers.length > autoNextStriker) {
         setPendingWicketNextStriker(autoNextStriker)
+        setPendingWicketEnd(newBatsmanEnd)
         setSheet('nextBatsman')
       }
     } else if (overJustEnded) {
@@ -335,13 +347,21 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
   function handleWicketSelectType(dismissalType) {
     setWicketDismissalType(dismissalType)
     setWicketRuns(0)
+    // Run-outs can dismiss either batsman; default to the striker.
+    setWicketOutBatsman(dismissalType === 'run out' ? striker : null)
   }
 
   function handleWicketConfirm() {
-    recordBall({ runs: wicketRuns, isWicket: true, dismissalType: wicketDismissalType })
+    recordBall({
+      runs: wicketRuns,
+      isWicket: true,
+      dismissalType: wicketDismissalType,
+      outBatsmanIndex: wicketDismissalType === 'run out' ? wicketOutBatsman : striker,
+    })
     setSheet(null)
     setWicketDismissalType(null)
     setWicketRuns(0)
+    setWicketOutBatsman(null)
     setCustomWicketInput(false)
   }
 
@@ -640,7 +660,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
 
       {/* Wicket bottom sheet */}
       {sheet === 'wicket' && (
-        <div className="bottom-sheet-overlay" onClick={() => { setSheet(null); setWicketDismissalType(null); setWicketRuns(0); setCustomWicketInput(false) }}>
+        <div className="bottom-sheet-overlay" onClick={() => { setSheet(null); setWicketDismissalType(null); setWicketRuns(0); setWicketOutBatsman(null); setCustomWicketInput(false) }}>
           <div className="bottom-sheet" onClick={e => e.stopPropagation()}>
             <h3>Wicket</h3>
             {!wicketDismissalType ? (
@@ -682,12 +702,30 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
                     />
                   )}
                 </div>
+                {wicketDismissalType === 'run out' && (
+                  <>
+                    <p style={{ margin: '14px 0 8px', fontWeight: 600, color: '#666', fontSize: 14 }}>
+                      Who is out?
+                    </p>
+                    <div className="sheet-options">
+                      {[striker, nonStriker].map(idx => (
+                        <button
+                          key={idx}
+                          className={`sheet-option ${wicketOutBatsman === idx ? 'selected' : ''}`}
+                          onClick={() => setWicketOutBatsman(idx)}
+                        >
+                          {getPlayerName('bat', idx)}{idx === striker ? ' (striker)' : ''}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
                 <button className="btn btn-primary" style={{ marginTop: 14, width: '100%' }} onClick={handleWicketConfirm}>
                   Confirm
                 </button>
               </>
             )}
-            <button className="sheet-cancel" onClick={() => { setSheet(null); setWicketDismissalType(null); setWicketRuns(0); setCustomWicketInput(false) }}>Cancel</button>
+            <button className="sheet-cancel" onClick={() => { setSheet(null); setWicketDismissalType(null); setWicketRuns(0); setWicketOutBatsman(null); setCustomWicketInput(false) }}>Cancel</button>
           </div>
         </div>
       )}
@@ -1218,7 +1256,8 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
                     className="menu-item"
                     style={{ fontWeight: i === pendingWicketNextStriker ? 700 : 500, color: i === pendingWicketNextStriker ? 'var(--green-dark)' : 'var(--text)' }}
                     onClick={() => {
-                      setStriker(i)
+                      if (pendingWicketEnd === 'nonStriker') setNonStriker(i)
+                      else setStriker(i)
                       setPendingWicketNextStriker(null)
                       setSheet(null)
                     }}
@@ -1232,7 +1271,7 @@ export default function Scoring({ matchId, onBack, onViewScorecard, onShareSync 
             <button
               className="sheet-cancel"
               onClick={() => {
-                setStriker(pendingWicketNextStriker)
+                // The auto batsman is already placed at the correct end by recordBall.
                 setPendingWicketNextStriker(null)
                 setSheet(null)
               }}

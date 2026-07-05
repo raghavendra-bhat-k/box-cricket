@@ -73,6 +73,37 @@ describe('calculateScore', () => {
     expect(s.batsmen[0].runs).toBe(2)
   })
 
+  it('does not credit the bowler for a run-out (charged to the team only)', () => {
+    const balls = [
+      makeBall({ runs: 0, isWicket: true, dismissalType: 'run out', bowlerIndex: 0, bowlerName: 'Sachin' }),
+      makeBall({ runs: 0, isWicket: true, dismissalType: 'bowled', bowlerIndex: 0, bowlerName: 'Sachin' }),
+    ]
+    const s = calculateScore(balls)
+    expect(s.wickets).toBe(2) // team is charged both
+    expect(s.bowlers['Sachin'].wickets).toBe(1) // bowler credited only for the bowled
+  })
+
+  it('credits the bowler for caught, lbw, stumped and hit wicket but not retired', () => {
+    const cases = [
+      ['caught', 1], ['lbw', 1], ['stumped', 1], ['hit wicket', 1],
+      ['run out', 0], ['retired hurt', 0], ['obstructing the field', 0],
+    ]
+    for (const [type, expected] of cases) {
+      const s = calculateScore([makeBall({ runs: 0, isWicket: true, dismissalType: type, bowlerIndex: 0, bowlerName: 'B' })])
+      expect(s.bowlers['B'].wickets).toBe(expected)
+    }
+  })
+
+  it('attributes a run-out dismissal to the non-striker when specified', () => {
+    const balls = [
+      makeBall({ runs: 1, isWicket: true, dismissalType: 'run out', batsmanIndex: 0, outBatsmanIndex: 1 }),
+    ]
+    const s = calculateScore(balls)
+    expect(s.batsmen[1].howOut).toBe('run out')
+    expect(s.batsmen[0].howOut).toBe('not out') // striker faced but survived
+    expect(s.batsmen[0].runs).toBe(1) // completed run credited to the striker
+  })
+
   it('wide does not count as legal ball, adds to extras', () => {
     const balls = [
       makeBall({ runs: 0, isExtra: true, extraType: 'wide', extraRuns: 1 }),
@@ -649,24 +680,48 @@ describe('restoreStateFromBalls — batsman scoring scenarios', () => {
     expect(state.nonStriker).toBe(1)
   })
 
-  it('wicket on last ball of over: new batsman faces next over', () => {
+  it('wicket on last ball of over: the not-out batsman faces next over', () => {
+    // Striker (0) out on the 6th ball; new batsman (2) comes in at the striker end,
+    // then the over-end swap gives strike to the not-out batsman (1).
     const balls = [
       makeBall({ runs: 0 }), makeBall({ runs: 0 }), makeBall({ runs: 0 }),
       makeBall({ runs: 0 }), makeBall({ runs: 0 }),
       makeBall({ runs: 0, isWicket: true, dismissalType: 'bowled' }),
     ]
     const state = restoreStateFromBalls(balls)
-    expect(state.striker).toBe(2)
+    expect(state.striker).toBe(1)
+    expect(state.nonStriker).toBe(2)
     expect(state.bowlerIdx).toBe(1)
   })
 
-  it('run out: new batsman comes in at striker end', () => {
+  it('run out on an odd run: the surviving batsman is on strike', () => {
+    // Striker (0) run out going for a 2nd run after completing 1 (odd → crossed),
+    // so the survivor (1) is on strike and the new batsman (2) is at the far end.
     const balls = [
       makeBall({ runs: 1, isWicket: true, dismissalType: 'run out', batsmanIndex: 0 }),
     ]
     const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(1)
+    expect(state.nonStriker).toBe(2)
+  })
+
+  it('run out on an even run: the new batsman is on strike', () => {
+    // 2 completed runs (even → no crossing); striker (0) out, new batsman (2) on strike.
+    const balls = [
+      makeBall({ runs: 2, isWicket: true, dismissalType: 'run out', batsmanIndex: 0 }),
+    ]
+    const state = restoreStateFromBalls(balls)
     expect(state.striker).toBe(2)
     expect(state.nonStriker).toBe(1)
+  })
+
+  it('run out of the non-striker: the striker keeps strike', () => {
+    const balls = [
+      makeBall({ runs: 0, isWicket: true, dismissalType: 'run out', batsmanIndex: 0, outBatsmanIndex: 1 }),
+    ]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(0)
+    expect(state.nonStriker).toBe(2)
   })
 
   it('wide never rotates strike regardless of extra runs', () => {

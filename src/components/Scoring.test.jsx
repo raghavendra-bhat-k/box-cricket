@@ -170,6 +170,34 @@ describe('Scoring - wicket with runs', () => {
     })
   })
 
+  it('run out lets the scorer pick which batsman is out and records outBatsmanIndex', async () => {
+    const id = await createTestMatch()
+    renderScoring(id)
+    await waitFor(() => screen.getByText('W'))
+
+    fireEvent.click(screen.getByText('W'))
+    await waitFor(() => screen.getByText('Run Out'))
+    fireEvent.click(screen.getByText('Run Out'))
+    await waitFor(() => screen.getByText('Confirm'))
+
+    // The "Who is out?" selector offers the striker (Alice) and non-striker (Bob).
+    await waitFor(() => expect(screen.getByText('Who is out?')).toBeInTheDocument())
+    expect(screen.getByText('Alice (striker)')).toBeInTheDocument()
+    // Pick the non-striker (Bob) as the run-out victim (scope to the wicket sheet —
+    // "Bob" also appears in the batsman display).
+    const sheet = screen.getByText('Confirm').closest('.bottom-sheet')
+    fireEvent.click(within(sheet).getByText('Bob'))
+    fireEvent.click(screen.getByText('Confirm'))
+
+    await waitFor(async () => {
+      const balls = await getBalls(id, 1)
+      expect(balls).toHaveLength(1)
+      expect(balls[0].dismissalType).toBe('run out')
+      expect(balls[0].outBatsmanIndex).toBe(1) // Bob, the non-striker
+      expect(balls[0].batsmanIndex).toBe(0) // Alice still faced the delivery
+    })
+  })
+
   it('wicket defaults to 0 runs', async () => {
     const id = await createTestMatch()
     renderScoring(id)
