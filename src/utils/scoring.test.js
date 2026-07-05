@@ -672,8 +672,8 @@ describe('restoreStateFromBalls — run mapping (tapRuns)', () => {
 describe('restoreStateFromBalls — batsman scoring scenarios', () => {
   it('consecutive wickets bring in new batsmen correctly', () => {
     const balls = [
-      makeBall({ runs: 0, isWicket: true, dismissalType: 'bowled' }), // s=2, ns=1
-      makeBall({ runs: 0, isWicket: true, dismissalType: 'bowled' }), // s=3, ns=1
+      makeBall({ runs: 0, isWicket: true, dismissalType: 'bowled', batsmanIndex: 0 }), // s=2, ns=1
+      makeBall({ runs: 0, isWicket: true, dismissalType: 'bowled', batsmanIndex: 2 }), // s=3, ns=1
     ]
     const state = restoreStateFromBalls(balls)
     expect(state.striker).toBe(3)
@@ -715,6 +715,21 @@ describe('restoreStateFromBalls — batsman scoring scenarios', () => {
     expect(state.nonStriker).toBe(1)
   })
 
+  it('striker run out (no crossing) on the last ball: the not-out batsman faces next over', () => {
+    // Issue 2: striker (0) run out going for a quick single that did not complete
+    // (0 runs, no crossing) on the 6th ball. The new batsman enters at the striker
+    // end, then the over-end swap gives strike to the not-out batsman (1).
+    const balls = [
+      makeBall({ runs: 0 }), makeBall({ runs: 0 }), makeBall({ runs: 0 }),
+      makeBall({ runs: 0 }), makeBall({ runs: 0 }),
+      makeBall({ runs: 0, isWicket: true, dismissalType: 'run out', batsmanIndex: 0, outBatsmanIndex: 0 }),
+    ]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(1)
+    expect(state.nonStriker).toBe(2)
+    expect(state.bowlerIdx).toBe(1)
+  })
+
   it('run out of the non-striker: the striker keeps strike', () => {
     const balls = [
       makeBall({ runs: 0, isWicket: true, dismissalType: 'run out', batsmanIndex: 0, outBatsmanIndex: 1 }),
@@ -731,6 +746,41 @@ describe('restoreStateFromBalls — batsman scoring scenarios', () => {
     ]
     const state = restoreStateFromBalls(balls)
     expect(state.striker).toBe(0)
+  })
+
+  it('restores the persisted incoming batsman after a wicket (out-of-order pick)', () => {
+    // The scorer sent in batsman 5 (not the default next, 2). newBatsmanIndex is
+    // persisted, so a resume brings back 5 — not the computed default.
+    const balls = [
+      makeBall({ runs: 0, isWicket: true, dismissalType: 'bowled', batsmanIndex: 0, newBatsmanIndex: 5 }),
+    ]
+    const state = restoreStateFromBalls(balls)
+    expect(state.striker).toBe(5)
+    expect(state.nonStriker).toBe(1)
+  })
+
+  it('self-heals the striker from batsmanIndex when a later ball reveals an out-of-order batsman', () => {
+    // Legacy data with no newBatsmanIndex: batsman 6 came in out of order and the
+    // next ball records him as the striker, so restore must adopt index 6.
+    const balls = [
+      makeBall({ runs: 0, isWicket: true, dismissalType: 'bowled', batsmanIndex: 0 }), // default would guess 2
+      makeBall({ runs: 1, batsmanIndex: 6 }), // truth: 6 actually faced
+    ]
+    const state = restoreStateFromBalls(balls)
+    // After the single run, strike rotates; the not-out original partner (1) is on strike.
+    expect(state.striker).toBe(1)
+    expect(state.nonStriker).toBe(6)
+  })
+
+  it('fallback for the incoming batsman skips players who are already out', () => {
+    // Two bowled wickets (0 and 1 out); the next batsman must be 2, never a spent index.
+    const balls = [
+      makeBall({ runs: 0, isWicket: true, dismissalType: 'bowled', batsmanIndex: 0 }),
+      makeBall({ runs: 0, isWicket: true, dismissalType: 'bowled', batsmanIndex: 2, outBatsmanIndex: 1 }),
+    ]
+    const state = restoreStateFromBalls(balls)
+    expect([state.striker, state.nonStriker]).toContain(2) // 2 survives
+    expect([state.striker, state.nonStriker]).toContain(3) // fresh batsman, not 0/1
   })
 
   it('wide with even extra runs also does not rotate strike', () => {

@@ -21,7 +21,7 @@ const MATCH_FIELDS = [
 const BALL_FIELDS = [
   'uid', 'sourceUid', 'matchSyncId', 'sequence', 'innings', 'over', 'ballInOver',
   'runs', 'isExtra', 'extraType', 'extraRuns', 'isWicket', 'dismissalType',
-  'batsmanIndex', 'outBatsmanIndex', 'bowlerIndex', 'bowlerName', 'createdDeviceId', 'createdAt', 'updatedAt',
+  'batsmanIndex', 'outBatsmanIndex', 'newBatsmanIndex', 'bowlerIndex', 'bowlerName', 'createdDeviceId', 'createdAt', 'updatedAt',
   'deletedAt',
 ];
 
