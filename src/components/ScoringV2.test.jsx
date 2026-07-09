@@ -237,6 +237,86 @@ describe('ScoringV2 - guided startup flow', () => {
   })
 })
 
+describe('ScoringV2 - guided in-play flows', () => {
+  // Guided match with openings already set so we start straight in scoring.
+  // Uses full 6-player rosters so an incoming batsman can be overridden.
+  async function guidedMatch(overrides = {}) {
+    const id = await createV2Match({
+      playersPerSide: 6,
+      teamAPlayers: ['Alice', 'Bob', 'Charlie', 'Dave', 'Eve', 'Frank'],
+      teamBPlayers: ['George', 'Helen', 'Iris', 'Jack', 'Kate', 'Leo'],
+      ...overrides,
+    })
+    await db.matches.update(id, {
+      toss: { wonBy: 'A', decision: 'bat', battingFirst: 'A' },
+      openingSetup: { striker: 0, nonStriker: 1, bowlerIndex: 0 },
+    })
+    return id
+  }
+  const inplay = { guidedScoring: true, toss: true, openingBatsmen: true, forceBowlerEachOver: true, detailedWicket: true, auditLog: true }
+
+  it('shows the full-screen wicket flow and then prompts for the new batsman', async () => {
+    const id = await guidedMatch()
+    renderV2(id, inplay)
+    await waitFor(() => screen.getByText('W'))
+    fireEvent.click(screen.getByText('W'))
+    // Full-screen wicket step (not the bottom sheet).
+    await waitFor(() => expect(screen.getByText('How did the batsman get out?')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Bowled'))
+    fireEvent.click(screen.getByText('Confirm Wicket'))
+    // New-batsman step appears.
+    await waitFor(() => expect(screen.getByText('Who comes in to bat?')).toBeInTheDocument())
+    fireEvent.click(screen.getByText(/Continue with/))
+    // Back to scoring, one wicket down.
+    await waitFor(() => expect(screen.getByText(/Team A: 0\/1/)).toBeInTheDocument())
+  })
+
+  it('lets you override the incoming batsman', async () => {
+    const id = await guidedMatch()
+    renderV2(id, inplay)
+    await waitFor(() => screen.getByText('W'))
+    fireEvent.click(screen.getByText('W'))
+    await waitFor(() => screen.getByText('How did the batsman get out?'))
+    fireEvent.click(screen.getByText('Bowled'))
+    fireEvent.click(screen.getByText('Confirm Wicket'))
+    await waitFor(() => screen.getByText('Who comes in to bat?'))
+    // Pick Dave (index 3) instead of the default (Charlie, index 2).
+    fireEvent.click(screen.getByRole('button', { name: 'Dave' }))
+    await waitFor(() => expect(screen.getByText(/Team A: 0\/1/)).toBeInTheDocument())
+    const balls = await getBalls(id, 1)
+    expect(balls[0].newBatsmanIndex).toBe(3)
+  })
+
+  it('forces a bowler selection at the end of an over', async () => {
+    const id = await guidedMatch({ totalOvers: 2 })
+    renderV2(id, inplay)
+    await waitFor(() => screen.getByRole('button', { name: '1' }))
+    // Bowl 5 legal singles (each settling), then the 6th completes the over.
+    for (let i = 1; i <= 5; i++) {
+      fireEvent.click(screen.getByRole('button', { name: '1' }))
+      await waitFor(() => expect(screen.getByText(new RegExp(`Team A: ${i}/0`))).toBeInTheDocument())
+    }
+    fireEvent.click(screen.getByRole('button', { name: '1' }))
+    // Forced bowler step appears before the next over.
+    await waitFor(() => expect(screen.getByText(/Who bowls over 2/)).toBeInTheDocument())
+    fireEvent.click(screen.getByText(/Continue with/))
+    // Scoring resumes.
+    await waitFor(() => expect(screen.getByText('EX')).toBeInTheDocument())
+    const log = await getAuditLog(id)
+    expect(log.some(e => e.action === 'bowlerSelected')).toBe(true)
+  })
+
+  it('uses the bottom-sheet wicket (not full screen) when detailedWicket is off', async () => {
+    const id = await guidedMatch()
+    renderV2(id, { guidedScoring: true, detailedWicket: false })
+    await waitFor(() => screen.getByText('W'))
+    fireEvent.click(screen.getByText('W'))
+    // The bottom sheet heading, not the full-screen flow subtitle.
+    await waitFor(() => expect(screen.getByText('Wicket')).toBeInTheDocument())
+    expect(screen.queryByText('How did the batsman get out?')).not.toBeInTheDocument()
+  })
+})
+
 describe('ScoringV2 - innings and match end', () => {
   async function seedCompleteFirstInnings(id, runsPerBall = 0) {
     for (let i = 0; i < 6; i++) {
