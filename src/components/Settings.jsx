@@ -26,13 +26,30 @@ function Toggle({ checked, onChange, disabled }) {
   )
 }
 
-export default function Settings({ settings, onChange, onBack }) {
+export default function Settings({ settings, onChange, onBack, onExportDebugLog }) {
   const [local, setLocal] = useState(settings)
+  const [debugStatus, setDebugStatus] = useState('')
 
   function update(patch) {
     const next = { ...local, ...patch }
     setLocal(next)
     onChange(next)
+  }
+
+  async function handleExportDebug() {
+    setDebugStatus('Preparing…')
+    try {
+      const result = await onExportDebugLog?.()
+      if (!result || result.status === 'empty') {
+        setDebugStatus('No guided matches with a debug log yet.')
+      } else if (result.status === 'cancelled') {
+        setDebugStatus('')
+      } else {
+        setDebugStatus(`Exported debug log for ${result.matchCount} match${result.matchCount !== 1 ? 'es' : ''}.`)
+      }
+    } catch {
+      setDebugStatus('Could not export debug log.')
+    }
   }
 
   const guided = local.guidedScoring
@@ -65,6 +82,21 @@ export default function Settings({ settings, onChange, onBack }) {
               <Toggle checked={local[key] !== false} onChange={val => update({ [key]: val })} />
             </div>
           ))}
+        </div>
+      )}
+
+      {guided && (
+        <div className="card settings-card">
+          <div className="settings-row">
+            <div className="settings-label">
+              <strong>Export Debug Log</strong>
+              <small>Support tool. Downloads the recorded audit trail so a developer can replay a match. Not a normal backup — never contains your match export.</small>
+            </div>
+            <button className="btn btn-small btn-secondary" onClick={handleExportDebug}>
+              Export
+            </button>
+          </div>
+          {debugStatus && <p className="settings-status">{debugStatus}</p>}
         </div>
       )}
     </div>

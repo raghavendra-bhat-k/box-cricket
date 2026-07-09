@@ -7,6 +7,7 @@ import Scorecard from './components/Scorecard'
 import Settings from './components/Settings'
 import Icon from './components/Icon'
 import { loadSettings, saveSettings } from './settings'
+import { exportDebugLog } from './utils/debug'
 import {
   applySyncImport,
   exportDayPayload,
@@ -141,7 +142,7 @@ export default function App() {
   }
 
   if (screen === 'settings') {
-    return <Settings settings={settings} onChange={updateSettings} onBack={goHome} />
+    return <Settings settings={settings} onChange={updateSettings} onBack={goHome} onExportDebugLog={exportDebugLog} />
   }
 
   if (screen === 'new') {

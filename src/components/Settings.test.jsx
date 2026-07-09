@@ -1,13 +1,13 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import Settings from './Settings'
 import { DEFAULT_SETTINGS } from '../settings'
 
-function renderSettings(overrides = {}) {
+function renderSettings(overrides = {}, onExportDebugLog) {
   const onChange = vi.fn()
   const onBack = vi.fn()
   const settings = { ...DEFAULT_SETTINGS, ...overrides }
-  render(<Settings settings={settings} onChange={onChange} onBack={onBack} />)
+  render(<Settings settings={settings} onChange={onChange} onBack={onBack} onExportDebugLog={onExportDebugLog} />)
   return { onChange, onBack }
 }
 
@@ -42,5 +42,46 @@ describe('Settings', () => {
     const { onBack } = renderSettings()
     fireEvent.click(screen.getByText('←'))
     expect(onBack).toHaveBeenCalled()
+  })
+
+  it('hides the debug export unless guided scoring is on', () => {
+    renderSettings({ guidedScoring: false })
+    expect(screen.queryByText('Export Debug Log')).not.toBeInTheDocument()
+  })
+
+  it('exports the debug log and shows a success status', async () => {
+    const onExport = vi.fn().mockResolvedValue({ status: 'downloaded', matchCount: 2 })
+    renderSettings({ guidedScoring: true }, onExport)
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }))
+    await waitFor(() => {
+      expect(onExport).toHaveBeenCalled()
+      expect(screen.getByText('Exported debug log for 2 matches.')).toBeInTheDocument()
+    })
+  })
+
+  it('shows an empty-state message when there is no debug log', async () => {
+    const onExport = vi.fn().mockResolvedValue({ status: 'empty', matchCount: 0 })
+    renderSettings({ guidedScoring: true }, onExport)
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }))
+    await waitFor(() => {
+      expect(screen.getByText('No guided matches with a debug log yet.')).toBeInTheDocument()
+    })
+  })
+
+  it('surfaces an error message when the export throws', async () => {
+    const onExport = vi.fn().mockRejectedValue(new Error('boom'))
+    renderSettings({ guidedScoring: true }, onExport)
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }))
+    await waitFor(() => {
+      expect(screen.getByText('Could not export debug log.')).toBeInTheDocument()
+    })
+  })
+
+  it('clears the status when a native share is cancelled', async () => {
+    const onExport = vi.fn().mockResolvedValue({ status: 'cancelled', matchCount: 1 })
+    renderSettings({ guidedScoring: true }, onExport)
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }))
+    await waitFor(() => expect(onExport).toHaveBeenCalled())
+    expect(screen.queryByText(/Exported debug log/)).not.toBeInTheDocument()
   })
 })
