@@ -16,6 +16,8 @@ const MATCH_FIELDS = [
   'syncId', 'sourceSyncId', 'date', 'dayKey', 'status', 'teamA', 'teamB',
   'totalOvers', 'playersPerSide', 'teamASize', 'teamBSize', 'currentInnings',
   'result', 'rules', 'tournamentName', 'createdDeviceId', 'updatedAt',
+  // v2 (guided scoring) match state travels with the match; the audit log does NOT.
+  'appVersion', 'toss', 'openingSetup',
 ];
 
 const BALL_FIELDS = [

@@ -7,6 +7,15 @@ db.version(1).stores({
   balls: '++id, matchId, innings, over, ballInOver'
 });
 
+// Version 2 adds the auditLog store used by the v2 (guided) scoring experience.
+// It records every mutation so a match can be replayed for offline/support debugging.
+// This store is intentionally kept OUT of the sync/export path (see utils/sync.js).
+db.version(2).stores({
+  matches: '++id, date, status',
+  balls: '++id, matchId, innings, over, ballInOver',
+  auditLog: '++id, matchId, seq'
+});
+
 export default db;
 
 export function createId(prefix = 'id') {
@@ -44,6 +53,10 @@ export function withMatchSyncFields(match) {
     syncId: match.syncId || createId('match'),
     dayKey: match.dayKey || getDayKey(date),
     tournamentName: match.tournamentName || '',
+    // v2 (guided scoring) fields — default to the v1 shape for backward compatibility.
+    appVersion: match.appVersion ?? 1,
+    toss: match.toss ?? null,
+    openingSetup: match.openingSetup ?? null,
     createdDeviceId: match.createdDeviceId || getDeviceId(),
     updatedAt: match.updatedAt || now,
   };
@@ -63,7 +76,7 @@ export function withBallSyncFields(ball, sequence) {
   };
 }
 
-export async function createMatch({ teamA, teamB, totalOvers, playersPerSide, teamAPlayers, teamBPlayers, teamABowlingOrder, teamBBowlingOrder, rules, tournamentName }) {
+export async function createMatch({ teamA, teamB, totalOvers, playersPerSide, teamAPlayers, teamBPlayers, teamABowlingOrder, teamBBowlingOrder, rules, tournamentName, appVersion, toss, openingSetup }) {
   const date = new Date().toISOString();
   const matchId = await db.matches.add({
     ...withMatchSyncFields({
@@ -79,13 +92,48 @@ export async function createMatch({ teamA, teamB, totalOvers, playersPerSide, te
       result: null,
       rules: rules || null,
       tournamentName: tournamentName?.trim() || '',
+      appVersion: appVersion ?? 1,
+      toss: toss ?? null,
+      openingSetup: openingSetup ?? null,
     }),
   });
   return matchId;
 }
 
+// Creates a match tagged for the v2 guided-scoring experience and records the
+// first audit event so the match can be replayed from creation.
+export async function createMatchV2(config) {
+  const matchId = await createMatch({ ...config, appVersion: 2 });
+  await appendAudit({ matchId, action: 'matchCreated', payload: { config: { ...config, appVersion: 2 } } });
+  return matchId;
+}
+
 export async function getMatch(id) {
   return db.matches.get(id);
+}
+
+// --- Audit log (v2 guided scoring; excluded from sync/export) ---
+
+// Appends an immutable, ordered event for a match. `seq` is assigned per-match
+// so the log can be replayed in order regardless of the global auto-increment id.
+export async function appendAudit({ matchId, action, payload = null, stepId = null }) {
+  const count = await db.auditLog.where({ matchId }).count();
+  return db.auditLog.add({
+    matchId,
+    seq: count,
+    ts: new Date().toISOString(),
+    action,
+    payload,
+    stepId,
+  });
+}
+
+export async function getAuditLog(matchId) {
+  return db.auditLog.where({ matchId }).sortBy('seq');
+}
+
+export async function deleteAuditLog(matchId) {
+  return db.auditLog.where({ matchId }).delete();
 }
 
 export async function updateMatch(id, changes) {
@@ -146,6 +194,7 @@ export async function deleteBallsForMatch(matchId) {
 
 export async function deleteMatch(matchId) {
   await deleteBallsForMatch(matchId);
+  await deleteAuditLog(matchId);
   return db.matches.delete(matchId);
 }
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { createMatch } from '../db'
+import { createMatch, createMatchV2 } from '../db'
 
 const DEFAULT_BUTTONS = [
   { tap: 0, label: '0', enabled: true },
@@ -10,7 +10,7 @@ const DEFAULT_BUTTONS = [
   { tap: 6, label: '6', enabled: true },
 ]
 
-export default function NewMatch({ onBack, onStart, rematchFrom }) {
+export default function NewMatch({ onBack, onStart, rematchFrom, appVersion = 1 }) {
   const prev = rematchFrom
   const [teamA, setTeamA] = useState(prev?.teamA?.name || '')
   const [teamB, setTeamB] = useState(prev?.teamB?.name || '')
@@ -65,7 +65,7 @@ export default function NewMatch({ onBack, onStart, rematchFrom }) {
       if (hasDisabled) rules.disabledRuns = Object.keys(disabledRuns).filter(k => disabledRuns[k]).map(Number)
     }
 
-    const id = await createMatch({
+    const config = {
       teamA: teamA.trim(),
       teamB: teamB.trim(),
       totalOvers,
@@ -74,7 +74,9 @@ export default function NewMatch({ onBack, onStart, rematchFrom }) {
       teamAPlayers: teamAPlayers.map(p => p.trim()).filter(Boolean),
       teamBPlayers: teamBPlayers.map(p => p.trim()).filter(Boolean),
       rules,
-    })
+    }
+    // Guided (v2) matches are tagged so they route to the v2 scoring experience.
+    const id = appVersion === 2 ? await createMatchV2(config) : await createMatch(config)
     onStart(id)
   }
 

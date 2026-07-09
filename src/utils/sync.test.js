@@ -331,3 +331,28 @@ describe('JSON sync utilities', () => {
     navigator.share = originalShare
   })
 })
+
+describe('v2 export behaviour', () => {
+  it('includes appVersion, toss and openingSetup in exported matches', async () => {
+    const id = await createMatch({
+      teamA: 'Tigers', teamB: 'Lions', totalOvers: 6, playersPerSide: 6,
+      appVersion: 2,
+      toss: { wonBy: 'A', decision: 'bat', battingFirst: 'A' },
+      openingSetup: { striker: 0, nonStriker: 1, bowlerIndex: 0 },
+    })
+    const payload = await exportMatchPayload(id)
+    expect(payload.matches[0].appVersion).toBe(2)
+    expect(payload.matches[0].toss).toEqual({ wonBy: 'A', decision: 'bat', battingFirst: 'A' })
+    expect(payload.matches[0].openingSetup).toEqual({ striker: 0, nonStriker: 1, bowlerIndex: 0 })
+  })
+
+  it('never includes the audit log in an exported payload', async () => {
+    const { createMatchV2, appendAudit } = await import('../db')
+    const id = await createMatchV2({ teamA: 'Tigers', teamB: 'Lions', totalOvers: 6, playersPerSide: 6 })
+    await appendAudit({ matchId: id, action: 'ballAdded', payload: { runs: 4 } })
+    const payload = await exportMatchPayload(id)
+    expect(payload).not.toHaveProperty('auditLog')
+    // No exported field should carry audit action data.
+    expect(JSON.stringify(payload)).not.toContain('ballAdded')
+  })
+})
