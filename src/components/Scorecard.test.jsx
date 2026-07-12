@@ -220,4 +220,14 @@ describe('Scorecard', () => {
       expect(screen.getByText(/Lions/)).toBeInTheDocument()
     })
   })
+
+  it('labels the 1st-innings section with the team that batted first per the toss', async () => {
+    // Toss put team B (Lions) in to bat first, so innings 1 is Lions.
+    const id = await setupMatch({ appVersion: 2, toss: { wonBy: 'A', decision: 'bowl', battingFirst: 'B' } })
+    render(<Scorecard matchId={id} onBack={onBack} onResume={onResume} />)
+    await waitFor(() => {
+      // The first innings section heading names Lions (10/1 here), not Tigers.
+      expect(screen.getByText(/Lions - 10\/1/)).toBeInTheDocument()
+    })
+  })
 })

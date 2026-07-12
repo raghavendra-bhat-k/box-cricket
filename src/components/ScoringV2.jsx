@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getMatch, updateMatch, getBalls, addBall, removeLastBall, appendAudit } from '../db'
 import { calculateScore, getCurrentOver, ballDisplay, formatOvers, restoreStateFromBalls } from '../utils/scoring'
+import { isFeatureEnabled } from '../settings'
 import MiniScorebar from './MiniScorebar'
+import StartupFlow from './StartupFlow'
 import Icon from './Icon'
 
 // ScoringV2 — the guided (v2) scoring experience.
@@ -82,8 +84,14 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
 
   if (!match) return <div className="container">Loading...</div>
 
-  const battingTeam = innings === 1 ? match.teamA : match.teamB
-  const bowlingTeam = innings === 1 ? match.teamB : match.teamA
+  // The toss decides which team bats first; default to team A (v1 convention).
+  const battingFirst = match.toss?.battingFirst || 'A'
+  const firstBatKey = battingFirst === 'B' ? 'teamB' : 'teamA'
+  const secondBatKey = battingFirst === 'B' ? 'teamA' : 'teamB'
+  const battingKey = innings === 1 ? firstBatKey : secondBatKey
+  const bowlingKey = innings === 1 ? secondBatKey : firstBatKey
+  const battingTeam = match[battingKey]
+  const bowlingTeam = match[bowlingKey]
 
   function getPlayerName(team, index) {
     if (team === 'bat') return battingTeam.players?.[index] || `Bat ${index + 1}`
@@ -96,9 +104,7 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
   const currentOverBalls = getCurrentOver(balls)
   const totalBalls = match.totalOvers * 6
 
-  const teamASize = match.teamASize ?? match.playersPerSide
-  const teamBSize = match.teamBSize ?? match.playersPerSide
-  const currentTeamSize = innings === 1 ? teamASize : teamBSize
+  const currentTeamSize = (battingKey === 'teamA' ? match.teamASize : match.teamBSize) ?? match.playersPerSide
   const battingPlayerCount = Math.max(battingTeam.players?.length || 0, currentTeamSize)
   const isAllOut = score.wickets >= battingPlayerCount - 1
   const isOversComplete = score.legalBalls >= totalBalls
@@ -111,18 +117,20 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
   const getMappedRuns = tap => (runMapObj[tap] !== undefined ? runMapObj[tap] : tap)
 
   async function endMatch(finalScore) {
+    const firstBatName = match[firstBatKey].name
+    const secondBatName = match[secondBatKey].name
     let result
     if (innings === 1) {
-      result = `${match.teamA.name} scored ${finalScore.runs}/${finalScore.wickets}`
+      result = `${firstBatName} scored ${finalScore.runs}/${finalScore.wickets}`
     } else {
       const diff = finalScore.runs - firstInningsScore
       if (diff > 0) {
         const wicketsLeft = battingPlayerCount - 1 - finalScore.wickets
-        result = `${match.teamB.name} won by ${wicketsLeft} wicket${wicketsLeft !== 1 ? 's' : ''}`
+        result = `${secondBatName} won by ${wicketsLeft} wicket${wicketsLeft !== 1 ? 's' : ''}`
       } else if (diff === 0) {
         result = 'Match Tied'
       } else {
-        result = `${match.teamA.name} won by ${-diff} run${-diff !== 1 ? 's' : ''}`
+        result = `${firstBatName} won by ${-diff} run${-diff !== 1 ? 's' : ''}`
       }
     }
     await updateMatch(matchId, { status: 'completed', result })
@@ -252,6 +260,46 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
     setNoBallBatsmanRuns(0)
   }
 
+  async function handleToss(toss) {
+    await updateMatch(matchId, { toss })
+    await record('tossSet', { toss })
+    setMatch(prev => ({ ...prev, toss }))
+  }
+
+  async function handleOpenings({ openingSetup, names }) {
+    // Write any typed-in names into the correct rosters (batting players /
+    // bowling order), keyed off which team bats first.
+    const bf = match.toss?.battingFirst || 'A'
+    const batKey = bf === 'B' ? 'teamB' : 'teamA'
+    const bowlKey = bf === 'B' ? 'teamA' : 'teamB'
+    const updates = {}
+    if (Object.keys(names.batting).length) {
+      const players = [...(match[batKey].players || [])]
+      for (const [i, nm] of Object.entries(names.batting)) {
+        const idx = Number(i)
+        while (players.length <= idx) players.push('')
+        players[idx] = nm
+      }
+      updates[batKey] = { ...match[batKey], players }
+    }
+    if (Object.keys(names.bowling).length) {
+      const base = match[bowlKey].bowlingOrder?.length ? match[bowlKey].bowlingOrder : (match[bowlKey].players || [])
+      const order = [...base]
+      for (const [i, nm] of Object.entries(names.bowling)) {
+        const idx = Number(i)
+        while (order.length <= idx) order.push('')
+        order[idx] = nm
+      }
+      updates[bowlKey] = { ...match[bowlKey], bowlingOrder: order }
+    }
+    await updateMatch(matchId, { ...updates, openingSetup })
+    await record('openingSet', { openingSetup })
+    setMatch(prev => ({ ...prev, ...updates, openingSetup }))
+    setStriker(openingSetup.striker)
+    setNonStriker(openingSetup.nonStriker)
+    setBowlerIdx(openingSetup.bowlerIndex)
+  }
+
   async function startSecondInnings() {
     // Do all async work up front, then commit every piece of UI state in one
     // synchronous tick so React batches it into a single render. Otherwise an
@@ -272,15 +320,33 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
     setMatch(prev => ({ ...prev, currentInnings: 2 }))
   }
 
+  // Guided pre-match steps (toss / opening batsmen / opening bowler) cover the
+  // whole screen until complete. Only relevant at the very start of innings 1.
+  const needToss = isFeatureEnabled(settings, 'toss') && !match.toss
+  const needOpenings = isFeatureEnabled(settings, 'openingBatsmen') && !match.openingSetup
+  if (match.status === 'live' && innings === 1 && balls.length === 0 && (needToss || needOpenings)) {
+    return (
+      <StartupFlow
+        match={match}
+        settings={{
+          toss: isFeatureEnabled(settings, 'toss'),
+          openingBatsmen: isFeatureEnabled(settings, 'openingBatsmen'),
+        }}
+        onToss={handleToss}
+        onOpenings={handleOpenings}
+      />
+    )
+  }
+
   if (showInningsBreak) {
     const reasonText = inningsEndReason === 'all-out' ? 'All batsmen out' : `${match.totalOvers} overs completed`
     return (
       <div className="container innings-break">
         <h2>End of 1st Innings</h2>
         <div className="innings-end-reason">{reasonText}</div>
-        <p>{match.teamA.name}: {firstInningsScore} runs</p>
+        <p>{match[firstBatKey].name}: {firstInningsScore} runs</p>
         <div className="target">Target: {firstInningsScore + 1}</div>
-        <p>{match.teamB.name} need {firstInningsScore + 1} runs from {match.totalOvers} overs</p>
+        <p>{match[secondBatKey].name} need {firstInningsScore + 1} runs from {match.totalOvers} overs</p>
         <button className="btn btn-primary btn-large" style={{ marginTop: 20 }} onClick={startSecondInnings}>Start 2nd Innings</button>
         <button className="btn btn-secondary" style={{ marginTop: 10, width: '100%' }} onClick={() => setShowInningsBreak(false)}>← Continue in 1st Innings</button>
         <button className="btn btn-secondary" style={{ marginTop: 10, width: '100%' }} onClick={onViewScorecard}>View Scorecard</button>
@@ -301,10 +367,15 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
   const curBowlName = getPlayerName('bowl', bowlerIdx)
   const bowlStat = score.bowlers[curBowlName] ?? score.bowlers[bowlerIdx]
 
+  // MiniScorebar derives the batting team as innings 1 → teamA, innings 2 → teamB.
+  // Present teams in batting-first order so it labels the right side when the
+  // toss put team B in first.
+  const scorebarMatch = battingFirst === 'B' ? { ...match, teamA: match.teamB, teamB: match.teamA } : match
+
   return (
     <div className="container scoring-screen">
       <MiniScorebar
-        match={match}
+        match={scorebarMatch}
         score={score}
         innings={innings}
         onUndo={handleUndo}

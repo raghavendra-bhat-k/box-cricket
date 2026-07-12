@@ -31,6 +31,12 @@ export default function Scorecard({ matchId, onBack, onResume, onShareSync }) {
 
   if (!match || !innings1) return <div className="container">Loading...</div>
 
+  // The toss can put team B in to bat first (v2). Default 'A' keeps v1 unchanged.
+  const battingFirst = match.toss?.battingFirst || 'A'
+  const firstBat = battingFirst === 'B' ? 'B' : 'A'
+  const secondBat = battingFirst === 'B' ? 'A' : 'B'
+  const teamNameOf = t => (t === 'A' ? match.teamA.name : match.teamB.name)
+
   function getPlayerName(team, index, role) {
     const t = team === 'A' ? match.teamA : match.teamB
     // Bowlers: prefer the bowling rotation slot so legacy index-keyed rows resolve
@@ -65,10 +71,10 @@ export default function Scorecard({ matchId, onBack, onResume, onShareSync }) {
       return t
     }
 
-    text += inningsText(innings1, match.teamA.name, 'A', 'A', 'B')
+    text += inningsText(innings1, teamNameOf(firstBat), firstBat, firstBat, secondBat)
     if (innings2) {
       text += `\n${'─'.repeat(28)}\n\n`
-      text += inningsText(innings2, match.teamB.name, 'B', 'B', 'A')
+      text += inningsText(innings2, teamNameOf(secondBat), secondBat, secondBat, firstBat)
     }
     if (match.result) {
       text += `\n${'─'.repeat(28)}\n*${match.result}*`
@@ -193,13 +199,13 @@ export default function Scorecard({ matchId, onBack, onResume, onShareSync }) {
 
       {match.result && <div className="result-banner">{match.result}</div>}
 
-      {renderInnings(innings1, match.teamA.name, 'A', 'B')}
-      {innings2 && renderInnings(innings2, match.teamB.name, 'B', 'A')}
+      {renderInnings(innings1, teamNameOf(firstBat), firstBat, secondBat)}
+      {innings2 && renderInnings(innings2, teamNameOf(secondBat), secondBat, firstBat)}
 
       <button className="btn btn-secondary" style={{ width: '100%', marginTop: 8 }} onClick={() => setShowBallLog(prev => !prev)}>
         <Icon name="list" /> {showBallLog ? 'Hide Ball by Ball' : 'Ball by Ball'}
       </button>
-      {showBallLog && <BallLog match={match} inningsBalls={inningsBalls} />}
+      {showBallLog && <BallLog match={match} inningsBalls={inningsBalls} battingFirst={battingFirst} />}
 
       <div className="share-buttons">
         <button className="btn btn-whatsapp" onClick={shareWhatsApp}>

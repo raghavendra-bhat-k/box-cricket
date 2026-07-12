@@ -128,4 +128,19 @@ describe('BallLog', () => {
 
     expect(screen.getByText('Adarsha')).toBeInTheDocument()
   })
+
+  it('labels innings 1 with the batting-first team when battingFirst is B', () => {
+    render(
+      <BallLog
+        match={match}
+        battingFirst="B"
+        inningsBalls={{
+          1: [{ uid: 'b1', innings: 1, runs: 1, isExtra: false, extraRuns: 0, isWicket: false, batsmanIndex: 0, bowlerIndex: 0 }],
+        }}
+      />
+    )
+    // With team B batting first, the innings-1 heading names Lions, not Tigers.
+    expect(screen.getByText('Lions innings')).toBeInTheDocument()
+    expect(screen.getByText('Charlie')).toBeInTheDocument()
+  })
 })

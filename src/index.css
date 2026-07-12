@@ -205,6 +205,137 @@ body {
   padding: 4px 0 8px;
 }
 
+/* Guided (v2) full-screen flow overlays */
+.flow-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--bg);
+  display: flex;
+  justify-content: center;
+  overflow-y: auto;
+}
+
+.flow-overlay-inner {
+  width: 100%;
+  max-width: 560px;
+  padding: 20px 16px 32px;
+  display: flex;
+  flex-direction: column;
+}
+
+.flow-overlay-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.flow-back {
+  border: none;
+  background: none;
+  color: var(--green-dark);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.flow-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.flow-heading h2 {
+  color: var(--green-dark);
+  font-size: 22px;
+}
+
+.flow-subtitle {
+  color: var(--text-light);
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.flow-progress {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-light);
+}
+
+.flow-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-light);
+  margin: 14px 0 8px;
+}
+
+.flow-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.flow-option {
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  padding: 16px 12px;
+  cursor: pointer;
+}
+
+.flow-option.selected {
+  border-color: var(--green-mid);
+  background: color-mix(in srgb, var(--green-light) 20%, var(--card-bg));
+}
+
+.flow-confirm {
+  margin-top: 22px;
+}
+
+.player-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.player-option {
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  padding: 14px 16px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.player-option:active {
+  border-color: var(--green-mid);
+}
+
+.player-picker-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.player-picker-add input {
+  flex: 1;
+  min-width: 0;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 15px;
+  padding: 10px;
+}
+
 /* Buttons */
 .btn {
   border: none;

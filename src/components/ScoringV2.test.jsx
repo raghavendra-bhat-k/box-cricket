@@ -173,6 +173,70 @@ describe('ScoringV2 - extras and menu', () => {
   })
 })
 
+describe('ScoringV2 - guided startup flow', () => {
+  const guided = { guidedScoring: true, toss: true, openingBatsmen: true, auditLog: true }
+
+  it('runs toss then openings before showing the scoring grid', async () => {
+    const id = await createV2Match()
+    renderV2(id, guided)
+    // Toss step appears first (scoring grid is not yet shown).
+    await waitFor(() => expect(screen.getByText('Toss')).toBeInTheDocument())
+    expect(screen.queryByText('EX')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Team A' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Bat' }))
+    fireEvent.click(screen.getByText('Confirm Toss'))
+
+    // Opening batsmen then bowler.
+    await waitFor(() => expect(screen.getByText('Select the striker')).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Alice' }))
+    await waitFor(() => screen.getByText('Select the non-striker'))
+    fireEvent.click(screen.getByRole('button', { name: 'Bob' }))
+    await waitFor(() => screen.getByText('Select the bowler'))
+    fireEvent.click(screen.getByRole('button', { name: 'George' }))
+
+    // Now the scoring grid is shown with the chosen striker on strike.
+    await waitFor(() => expect(screen.getByText('EX')).toBeInTheDocument())
+    expect(screen.getByText('*Alice')).toBeInTheDocument()
+
+    const m = await db.matches.get(id)
+    expect(m.toss.battingFirst).toBe('A')
+    expect(m.openingSetup).toEqual({ striker: 0, nonStriker: 1, bowlerIndex: 0 })
+    const log = await getAuditLog(id)
+    expect(log.map(e => e.action)).toEqual(expect.arrayContaining(['tossSet', 'openingSet']))
+  })
+
+  it('bats team B first and labels the scorebar correctly when the toss elects to bowl', async () => {
+    const id = await createV2Match()
+    renderV2(id, guided)
+    await waitFor(() => screen.getByText('Toss'))
+    // Team A won the toss and elected to bowl -> Team B bats first.
+    fireEvent.click(screen.getByRole('button', { name: 'Team A' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Bowl' }))
+    fireEvent.click(screen.getByText('Confirm Toss'))
+
+    await waitFor(() => screen.getByText('Select the striker'))
+    // Batting roster is now team B (George/Helen/Iris).
+    fireEvent.click(screen.getByRole('button', { name: 'George' }))
+    await waitFor(() => screen.getByText('Select the non-striker'))
+    fireEvent.click(screen.getByRole('button', { name: 'Helen' }))
+    await waitFor(() => screen.getByText('Select the bowler'))
+    // Bowling roster is team A (Alice...).
+    fireEvent.click(screen.getByRole('button', { name: 'Alice' }))
+
+    await waitFor(() => expect(screen.getByText(/Team B: 0\/0/)).toBeInTheDocument())
+    expect(screen.getByText('*George')).toBeInTheDocument()
+  })
+
+  it('skips the startup flow when guided scoring is off', async () => {
+    const id = await createV2Match()
+    renderV2(id, { guidedScoring: false })
+    // Goes straight to scoring, no toss.
+    await waitFor(() => expect(screen.getByText('EX')).toBeInTheDocument())
+    expect(screen.queryByText('Toss')).not.toBeInTheDocument()
+  })
+})
+
 describe('ScoringV2 - innings and match end', () => {
   async function seedCompleteFirstInnings(id, runsPerBall = 0) {
     for (let i = 0; i < 6; i++) {
