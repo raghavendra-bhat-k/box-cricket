@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { deleteMatch, deleteMatchesByDay, deleteMatchesByTournament, getAllMatches } from './db'
+import { deleteMatch, deleteMatchesByDay, deleteMatchesByTournament, getAllMatches, getMatch } from './db'
 import MatchList from './components/MatchList'
 import NewMatch from './components/NewMatch'
 import Scoring from './components/Scoring'
 import Scorecard from './components/Scorecard'
+import Settings from './components/Settings'
 import Icon from './components/Icon'
+import { loadSettings, saveSettings } from './settings'
 import {
   applySyncImport,
   exportDayPayload,
@@ -33,11 +35,30 @@ export default function App() {
   })
   const [screen, setScreen] = useState('home')
   const [matchId, setMatchId] = useState(null)
+  const [matchVersion, setMatchVersion] = useState(1)
   const [rematchFrom, setRematchFrom] = useState(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [importState, setImportState] = useState(null)
   const [importError, setImportError] = useState('')
   const [importChoices, setImportChoices] = useState({})
+  const [settings, setSettings] = useState(() => loadSettings())
+
+  function updateSettings(next) {
+    setSettings(next)
+    saveSettings(next)
+  }
+
+  // Resolves which scoring experience a match should use, then routes to it.
+  async function openScoring(id) {
+    setMatchId(id)
+    try {
+      const match = await getMatch(id)
+      setMatchVersion(match?.appVersion ?? 1)
+    } catch {
+      setMatchVersion(1)
+    }
+    setScreen('scoring')
+  }
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -58,10 +79,9 @@ export default function App() {
   }
 
   function startMatch(id) {
-    setMatchId(id)
     setRematchFrom(null)
-    setScreen('scoring')
     setRefreshKey(k => k + 1)
+    openScoring(id)
   }
 
   function viewScorecard(id) {
@@ -70,8 +90,7 @@ export default function App() {
   }
 
   function resumeMatch(id) {
-    setMatchId(id)
-    setScreen('scoring')
+    openScoring(id)
   }
 
   function handleRematch(matchData) {
@@ -121,12 +140,18 @@ export default function App() {
     }
   }
 
+  if (screen === 'settings') {
+    return <Settings settings={settings} onChange={updateSettings} onBack={goHome} />
+  }
+
   if (screen === 'new') {
-    return <NewMatch onBack={goHome} onStart={startMatch} rematchFrom={rematchFrom} />
+    return <NewMatch onBack={goHome} onStart={startMatch} rematchFrom={rematchFrom} appVersion={settings.guidedScoring ? 2 : 1} />
   }
 
   if (screen === 'scoring') {
-    return <Scoring matchId={matchId} onBack={goHome} onViewScorecard={() => viewScorecard(matchId)} onShareSync={() => sharePayload(exportMatchPayload(matchId))} />
+    // TODO(v2): route matchVersion === 2 to <ScoringV2> once it lands (Phase 3).
+    // Until then a v2-tagged match still scores correctly in the v1 UI.
+    return <Scoring matchId={matchId} appVersion={matchVersion} onBack={goHome} onViewScorecard={() => viewScorecard(matchId)} onShareSync={() => sharePayload(exportMatchPayload(matchId))} />
   }
 
   if (screen === 'scorecard') {
@@ -140,14 +165,19 @@ export default function App() {
           <Icon name="logo" size={30} label="Box Cricket logo" />
           <h1 className="app-title">Box Cricket</h1>
         </div>
-        <div className="theme-picker">
-          <label htmlFor="theme-select">Palette</label>
-          <select id="theme-select" value={theme} onChange={e => setTheme(e.target.value)}>
-            <option value="royal">Red & Gold</option>
-            <option value="classic">Classic Green</option>
-            <option value="sky">Sky Blue</option>
-            <option value="sunset">Sunset</option>
-          </select>
+        <div className="home-header-actions">
+          <div className="theme-picker">
+            <label htmlFor="theme-select">Palette</label>
+            <select id="theme-select" value={theme} onChange={e => setTheme(e.target.value)}>
+              <option value="royal">Red & Gold</option>
+              <option value="classic">Classic Green</option>
+              <option value="sky">Sky Blue</option>
+              <option value="sunset">Sunset</option>
+            </select>
+          </div>
+          <button className="settings-btn" onClick={() => setScreen('settings')} aria-label="Settings" title="Settings">
+            <Icon name="settings" size={22} label="Settings" />
+          </button>
         </div>
       </div>
       <button className="btn btn-primary btn-large" onClick={() => setScreen('new')}>

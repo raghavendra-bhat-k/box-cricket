@@ -7,6 +7,10 @@ import { exportMatchPayload } from './utils/sync'
 beforeEach(async () => {
   await db.balls.clear()
   await db.matches.clear()
+  await db.auditLog.clear()
+  // Reset persisted settings so guided-scoring state does not leak between tests.
+  // (The test runtime's localStorage supports setItem; an empty value loads defaults.)
+  try { localStorage.setItem('boxCricketSettings', '') } catch { /* ignore */ }
 })
 
 describe('App - navigation', () => {
@@ -132,6 +136,39 @@ describe('App - navigation', () => {
       expect(screen.getByDisplayValue('Beta')).toBeInTheDocument()
       expect(screen.getByDisplayValue('8')).toBeInTheDocument()
       expect(screen.getByDisplayValue('5')).toBeInTheDocument()
+    })
+  })
+
+  it('navigates to the settings screen and back', async () => {
+    render(<App />)
+    fireEvent.click(screen.getByLabelText('Settings'))
+    await waitFor(() => expect(screen.getByText('Guided Scoring (v2)')).toBeInTheDocument())
+    // Sub-toggles stay hidden until guided scoring is enabled.
+    expect(screen.queryByText('Toss selection')).not.toBeInTheDocument()
+    fireEvent.click(document.querySelector('.back-btn'))
+    expect(screen.getByText('Box Cricket')).toBeInTheDocument()
+  })
+
+  it('creates a v2 match when guided scoring is enabled in settings', async () => {
+    render(<App />)
+    // Enable guided scoring.
+    fireEvent.click(screen.getByLabelText('Settings'))
+    await waitFor(() => screen.getByText('Guided Scoring (v2)'))
+    fireEvent.click(screen.getAllByRole('switch')[0])
+    fireEvent.click(document.querySelector('.back-btn'))
+
+    // Create a match through the normal flow.
+    fireEvent.click(screen.getByText('New Match'))
+    const nameInputs = screen.getAllByPlaceholderText('Team name')
+    fireEvent.change(nameInputs[0], { target: { value: 'Guided A' } })
+    fireEvent.change(nameInputs[1], { target: { value: 'Guided B' } })
+    fireEvent.click(screen.getByText('Start Match'))
+
+    // The created match is tagged appVersion 2.
+    await waitFor(async () => {
+      const matches = await db.matches.toArray()
+      expect(matches).toHaveLength(1)
+      expect(matches[0].appVersion).toBe(2)
     })
   })
 
