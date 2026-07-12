@@ -8,9 +8,13 @@ beforeEach(async () => {
   await db.balls.clear()
   await db.matches.clear()
   await db.auditLog.clear()
-  // Reset persisted settings so guided-scoring state does not leak between tests.
-  // (The test runtime's localStorage supports setItem; an empty value loads defaults.)
-  try { localStorage.setItem('boxCricketSettings', '') } catch { /* ignore */ }
+  // Reset persisted settings + theme so state does not leak between tests
+  // (localStorage persists across tests in this runtime; empty loads defaults).
+  try {
+    localStorage.setItem('boxCricketSettings', '')
+    localStorage.setItem('boxCricketTheme', 'royal')
+  } catch { /* ignore */ }
+  document.documentElement.dataset.theme = 'royal'
 })
 
 describe('App - navigation', () => {
