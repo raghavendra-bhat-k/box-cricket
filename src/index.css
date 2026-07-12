@@ -199,6 +199,12 @@ body {
   transform: translateX(18px);
 }
 
+.settings-status {
+  color: var(--text-light);
+  font-size: 12px;
+  padding: 4px 0 8px;
+}
+
 /* Buttons */
 .btn {
   border: none;
