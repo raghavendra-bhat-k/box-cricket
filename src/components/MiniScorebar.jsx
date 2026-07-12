@@ -1,7 +1,8 @@
 import { formatOvers, calculateRR, calculateRequiredRR } from '../utils/scoring'
 
 export default function MiniScorebar({
-  match, score, innings, onUndo, onSwapStriker, onMenu, firstInningsScore
+  match, score, innings, onUndo, onSwapStriker, onMenu, firstInningsScore,
+  onRedo, canRedo
 }) {
   const battingTeam = innings === 1 ? match.teamA.name : match.teamB.name
   const rr = calculateRR(score.runs, score.legalBalls)
@@ -34,6 +35,7 @@ export default function MiniScorebar({
       </div>
       <div className="scorebar-actions">
         <button onClick={onUndo}>Undo</button>
+        {onRedo && <button onClick={onRedo} disabled={!canRedo}>Redo</button>}
         <button onClick={onSwapStriker}>Swap Striker</button>
       </div>
     </div>
