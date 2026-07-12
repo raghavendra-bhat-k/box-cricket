@@ -317,6 +317,75 @@ describe('ScoringV2 - guided in-play flows', () => {
   })
 })
 
+describe('ScoringV2 - undo/redo', () => {
+  // Guided but with the pre-match + in-play prompts off, so we start in scoring.
+  const settings = { guidedScoring: true, undoRedo: true, toss: false, openingBatsmen: false, forceBowlerEachOver: false, detailedWicket: false, auditLog: true }
+
+  it('does not show a Redo button when undo/redo is disabled', async () => {
+    const id = await createV2Match()
+    renderV2(id, { ...settings, undoRedo: false })
+    await waitFor(() => screen.getByText('Undo'))
+    expect(screen.queryByText('Redo')).not.toBeInTheDocument()
+  })
+
+  it('undo then redo replays the ball back to the same score', async () => {
+    const id = await createV2Match()
+    renderV2(id, settings)
+    await waitFor(() => screen.getByText('4'))
+    fireEvent.click(screen.getByText('4'))
+    await waitFor(() => screen.getByText(/Team A: 4\/0/))
+
+    fireEvent.click(screen.getByText('Undo'))
+    await waitFor(() => expect(screen.getByText(/Team A: 0\/0/)).toBeInTheDocument())
+    expect(await getBalls(id, 1)).toHaveLength(0)
+
+    fireEvent.click(screen.getByText('Redo'))
+    await waitFor(() => expect(screen.getByText(/Team A: 4\/0/)).toBeInTheDocument())
+    const balls = await getBalls(id, 1)
+    expect(balls).toHaveLength(1)
+    expect(balls[0].runs).toBe(4)
+    const log = await getAuditLog(id)
+    expect(log.map(e => e.action)).toEqual(expect.arrayContaining(['undo', 'redo']))
+  })
+
+  it('Redo is disabled until an undo happens, and a new ball clears the redo history', async () => {
+    const id = await createV2Match()
+    renderV2(id, settings)
+    await waitFor(() => screen.getByText('4'))
+    // Nothing to redo yet.
+    expect(screen.getByText('Redo')).toBeDisabled()
+
+    fireEvent.click(screen.getByText('4'))
+    await waitFor(() => screen.getByText(/Team A: 4\/0/))
+    fireEvent.click(screen.getByText('Undo'))
+    await waitFor(() => expect(screen.getByText('Redo')).not.toBeDisabled())
+
+    // A new forward action invalidates the redo history.
+    fireEvent.click(screen.getByText('1'))
+    await waitFor(() => screen.getByText(/Team A: 1\/0/))
+    expect(screen.getByText('Redo')).toBeDisabled()
+  })
+
+  it('redo of a wicket restores the stamped incoming batsman', async () => {
+    const id = await createV2Match()
+    renderV2(id, settings)
+    await waitFor(() => screen.getByText('W'))
+    fireEvent.click(screen.getByText('W'))
+    fireEvent.click(screen.getByText('Bowled'))
+    fireEvent.click(screen.getByText('Confirm Wicket'))
+    await waitFor(() => screen.getByText(/Team A: 0\/1/))
+    const before = (await getBalls(id, 1))[0].newBatsmanIndex
+
+    fireEvent.click(screen.getByText('Undo'))
+    await waitFor(() => expect(screen.getByText(/Team A: 0\/0/)).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Redo'))
+    await waitFor(() => expect(screen.getByText(/Team A: 0\/1/)).toBeInTheDocument())
+    const after = (await getBalls(id, 1))[0]
+    expect(after.isWicket).toBe(true)
+    expect(after.newBatsmanIndex).toBe(before)
+  })
+})
+
 describe('ScoringV2 - innings and match end', () => {
   async function seedCompleteFirstInnings(id, runsPerBall = 0) {
     for (let i = 0; i < 6; i++) {

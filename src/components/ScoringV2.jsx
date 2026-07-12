@@ -42,10 +42,12 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
   const [wicketFlow, setWicketFlow] = useState(false) // full-screen wicket entry active
   const [pendingNewBatsman, setPendingNewBatsman] = useState(null) // { ballId, end, defaultIndex }
   const [bowlerAckOver, setBowlerAckOver] = useState(null) // over index whose bowler was confirmed
+  const [redoStack, setRedoStack] = useState([]) // balls removed by undo, awaiting redo
 
   const auditEnabled = settings.auditLog !== false
   const detailedWicket = isFeatureEnabled(settings, 'detailedWicket')
   const forceBowler = isFeatureEnabled(settings, 'forceBowlerEachOver')
+  const undoRedo = isFeatureEnabled(settings, 'undoRedo')
 
   const record = useCallback(async (action, payload) => {
     if (auditEnabled) await appendAudit({ matchId, action, payload })
@@ -170,6 +172,7 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
       bowlerName: getPlayerName('bowl', bowlerIdx),
     }
     const autoNext = isWicket ? Math.max(striker, nonStriker) + 1 : null
+    setRedoStack([]) // a new forward action invalidates the redo history
     const ballId = await addBall(ball)
     await record(isWicket ? 'wicket' : 'ballAdded', { ball: { ...ball, id: ballId } })
 
@@ -180,7 +183,15 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
     setNonStriker(restored.nonStriker)
     setBowlerIdx(restored.bowlerIdx)
 
-    const newScore = calculateScore(updatedBalls)
+    const inningsOver = await maybeEndInnings(calculateScore(updatedBalls))
+    // Which end the incoming batsman occupies after any strike rotation.
+    const end = restored.striker === autoNext ? 'striker' : restored.nonStriker === autoNext ? 'nonStriker' : 'striker'
+    return { ballId, isWicket, autoNext, end, inningsOver }
+  }
+
+  // Detects a completed innings/match from the current score and transitions to
+  // the innings break or the completed screen. Returns whether the innings ended.
+  async function maybeEndInnings(newScore) {
     const newIsAllOut = newScore.wickets >= battingPlayerCount - 1
     const newIsOversComplete = newScore.legalBalls >= totalBalls
     const newTargetChased = innings === 2 && firstInningsScore != null && newScore.runs > firstInningsScore
@@ -194,17 +205,11 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
         await endMatch(newScore)
       }
     }
-    // Which end the incoming batsman occupies after any strike rotation.
-    const end = restored.striker === autoNext ? 'striker' : restored.nonStriker === autoNext ? 'nonStriker' : 'striker'
-    return { ballId, isWicket, autoNext, end, inningsOver }
+    return inningsOver
   }
 
-  async function handleUndo() {
-    const removed = await removeLastBall(matchId, innings)
-    if (!removed) return
-    await record('undo', { ball: removed })
-    const updatedBalls = await getBalls(matchId, innings)
-    setBalls(updatedBalls)
+  // Re-derives striker/non-striker/bowler from the ball log (the source of truth).
+  function applyDerivedState(updatedBalls) {
     if (updatedBalls.length > 0) {
       const restored = restoreStateFromBalls(updatedBalls)
       setStriker(restored.striker)
@@ -215,6 +220,32 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
       setNonStriker(match.openingSetup?.nonStriker ?? 1)
       setBowlerIdx(match.openingSetup?.bowlerIndex ?? 0)
     }
+  }
+
+  async function handleUndo() {
+    const removed = await removeLastBall(matchId, innings)
+    if (!removed) return
+    await record('undo', { ball: removed })
+    // Keep the removed ball (with its stamped newBatsmanIndex etc.) so redo can
+    // replay the exact step. Drop the auto-increment id so re-adding is clean.
+    const { id, ...ballForRedo } = removed // eslint-disable-line no-unused-vars
+    setRedoStack(prev => [...prev, ballForRedo])
+    const updatedBalls = await getBalls(matchId, innings)
+    setBalls(updatedBalls)
+    applyDerivedState(updatedBalls)
+  }
+
+  async function handleRedo() {
+    if (redoStack.length === 0) return
+    const ball = redoStack[redoStack.length - 1]
+    await addBall(ball)
+    await record('redo', { ball })
+    setRedoStack(prev => prev.slice(0, -1))
+    const updatedBalls = await getBalls(matchId, innings)
+    setBalls(updatedBalls)
+    applyDerivedState(updatedBalls)
+    // Redoing a ball can re-complete the innings/match.
+    await maybeEndInnings(calculateScore(updatedBalls))
   }
 
   function swapStriker() {
@@ -523,6 +554,8 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
         onSwapStriker={swapStriker}
         onMenu={() => setSheet('menu')}
         firstInningsScore={firstInningsScore}
+        onRedo={undoRedo ? handleRedo : undefined}
+        canRedo={redoStack.length > 0}
       />
 
       {isInningsOver && innings === 1 && !targetChased && (
