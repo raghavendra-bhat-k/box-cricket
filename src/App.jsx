@@ -3,6 +3,7 @@ import { deleteMatch, deleteMatchesByDay, deleteMatchesByTournament, getAllMatch
 import MatchList from './components/MatchList'
 import NewMatch from './components/NewMatch'
 import Scoring from './components/Scoring'
+import ScoringV2 from './components/ScoringV2'
 import Scorecard from './components/Scorecard'
 import Settings from './components/Settings'
 import Icon from './components/Icon'
@@ -150,9 +151,10 @@ export default function App() {
   }
 
   if (screen === 'scoring') {
-    // TODO(v2): route matchVersion === 2 to <ScoringV2> once it lands (Phase 3).
-    // Until then a v2-tagged match still scores correctly in the v1 UI.
-    return <Scoring matchId={matchId} appVersion={matchVersion} onBack={goHome} onViewScorecard={() => viewScorecard(matchId)} onShareSync={() => sharePayload(exportMatchPayload(matchId))} />
+    if (matchVersion === 2) {
+      return <ScoringV2 matchId={matchId} settings={settings} onBack={goHome} onViewScorecard={() => viewScorecard(matchId)} />
+    }
+    return <Scoring matchId={matchId} onBack={goHome} onViewScorecard={() => viewScorecard(matchId)} onShareSync={() => sharePayload(exportMatchPayload(matchId))} />
   }
 
   if (screen === 'scorecard') {
