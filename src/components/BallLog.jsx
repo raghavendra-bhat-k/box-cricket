@@ -57,20 +57,23 @@ function buildRows(balls, battingTeam, bowlingTeam) {
   return rows
 }
 
-export default function BallLog({ match, inningsBalls }) {
+export default function BallLog({ match, inningsBalls, battingFirst = 'A' }) {
+  // The toss can put team B in to bat first (v2). Default 'A' keeps v1 unchanged.
+  const firstBat = battingFirst === 'B' ? match.teamB : match.teamA
+  const secondBat = battingFirst === 'B' ? match.teamA : match.teamB
   const sections = [
     {
       innings: 1,
-      title: `${match.teamA.name} innings`,
-      battingTeam: match.teamA,
-      bowlingTeam: match.teamB,
+      title: `${firstBat.name} innings`,
+      battingTeam: firstBat,
+      bowlingTeam: secondBat,
       balls: inningsBalls[1] || [],
     },
     {
       innings: 2,
-      title: `${match.teamB.name} innings`,
-      battingTeam: match.teamB,
-      bowlingTeam: match.teamA,
+      title: `${secondBat.name} innings`,
+      battingTeam: secondBat,
+      bowlingTeam: firstBat,
       balls: inningsBalls[2] || [],
     },
   ].filter(section => section.balls.length > 0)
