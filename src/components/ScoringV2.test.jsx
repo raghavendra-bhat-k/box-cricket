@@ -237,6 +237,86 @@ describe('ScoringV2 - guided startup flow', () => {
   })
 })
 
+describe('ScoringV2 - bug fixes', () => {
+  async function sixPlayerMatch(openingSetup) {
+    const id = await createV2Match({
+      playersPerSide: 6,
+      teamAPlayers: ['Alice', 'Bob', 'Charlie', 'Dave', 'Eve', 'Frank'],
+      teamBPlayers: ['George', 'Helen', 'Iris', 'Jack', 'Kate', 'Leo'],
+    })
+    await db.matches.update(id, {
+      toss: { wonBy: 'A', decision: 'bat', battingFirst: 'A' },
+      openingSetup,
+    })
+    return id
+  }
+
+  it('Bug 1: incoming batsman after a wicket is a real player, not an out-of-range slot', async () => {
+    // Openers chosen non-adjacently (Alice #0 and Frank #5). When Alice is out,
+    // the default incoming must be the lowest free player (#1 Bob), not #6 (Bat 7).
+    const id = await sixPlayerMatch({ striker: 0, nonStriker: 5, bowlerIndex: 0 })
+    renderV2(id, { guidedScoring: true, detailedWicket: true, toss: false, openingBatsmen: false })
+    await waitFor(() => screen.getByText('W'))
+    fireEvent.click(screen.getByText('W'))
+    await waitFor(() => screen.getByText('How did the batsman get out?'))
+    fireEvent.click(screen.getByText('Bowled'))
+    fireEvent.click(screen.getByText('Confirm Wicket'))
+    await waitFor(() => screen.getByText('Who comes in to bat?'))
+    // Default is Bob (#1), not "Batsman 7".
+    expect(screen.getByText('Continue with Bob')).toBeInTheDocument()
+    expect(screen.queryByText(/Batsman 7/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('Continue with Bob'))
+    await waitFor(() => screen.getByText(/Team A: 0\/1/))
+    const balls = await getBalls(id, 1)
+    expect(balls[0].newBatsmanIndex).toBe(1)
+  })
+
+  it('Bug 3: a no-ball can score 5 batsman runs via the custom input', async () => {
+    const id = await createV2Match()
+    renderV2(id, { guidedScoring: true, detailedWicket: false, toss: false, openingBatsmen: false })
+    await waitFor(() => screen.getByText('EX'))
+    fireEvent.click(screen.getByText('EX'))
+    fireEvent.click(screen.getByText('No Ball'))
+    const sheet = document.querySelector('.bottom-sheet')
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Custom runs' }))
+    fireEvent.change(within(sheet).getByLabelText('Custom run value'), { target: { value: '5' } })
+    fireEvent.click(screen.getByText('Confirm No Ball'))
+    // 5 batsman runs + 1 no-ball penalty = 6.
+    await waitFor(() => expect(screen.getByText(/Team A: 6\/0/)).toBeInTheDocument())
+    const balls = await getBalls(id, 1)
+    expect(balls[0].runs).toBe(5)
+    expect(balls[0].extraType).toBe('noBall')
+  })
+
+  it('Bug 2: tapping a delivery lets you correct its runs', async () => {
+    const id = await createV2Match()
+    renderV2(id, { guidedScoring: true, detailedWicket: false, toss: false, openingBatsmen: false })
+    await waitFor(() => screen.getByText('4'))
+    fireEvent.click(screen.getByText('4'))
+    await waitFor(() => screen.getByText(/Team A: 4\/0/))
+    // Tap the "4" delivery in the current over (accessible name "Edit ball 4").
+    fireEvent.click(screen.getByRole('button', { name: 'Edit ball 4' }))
+    await waitFor(() => screen.getByText('Edit Ball'))
+    const sheet = document.querySelector('.bottom-sheet')
+    fireEvent.click(within(sheet).getByRole('button', { name: '1' }))
+    fireEvent.click(screen.getByText('Save'))
+    await waitFor(() => expect(screen.getByText(/Team A: 1\/0/)).toBeInTheDocument())
+  })
+
+  it('Bug 2: a delivery can be deleted', async () => {
+    const id = await createV2Match()
+    renderV2(id, { guidedScoring: true, detailedWicket: false, toss: false, openingBatsmen: false })
+    await waitFor(() => screen.getByText('4'))
+    fireEvent.click(screen.getByText('4'))
+    await waitFor(() => screen.getByText(/Team A: 4\/0/))
+    fireEvent.click(screen.getByRole('button', { name: 'Edit ball 4' }))
+    await waitFor(() => screen.getByText('Edit Ball'))
+    fireEvent.click(screen.getByText('Delete Ball'))
+    await waitFor(() => expect(screen.getByText(/Team A: 0\/0/)).toBeInTheDocument())
+    expect(await getBalls(id, 1)).toHaveLength(0)
+  })
+})
+
 describe('ScoringV2 - guided in-play flows', () => {
   // Guided match with openings already set so we start straight in scoring.
   // Uses full 6-player rosters so an incoming batsman can be overridden.

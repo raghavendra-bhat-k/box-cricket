@@ -139,9 +139,16 @@ describe('Scorecard', () => {
     const id = await setupMatch()
     render(<Scorecard matchId={id} onBack={onBack} onResume={onResume} />)
 
-    await waitFor(() => screen.getByText('Home'))
-    fireEvent.click(screen.getByText('Home'))
+    // There are now two Home controls (header icon + footer button); either goes home.
+    await waitFor(() => screen.getAllByRole('button', { name: 'Home' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Home' })[0])
     expect(onBack).toHaveBeenCalled()
+  })
+
+  it('shows a Home icon in the scorecard header', async () => {
+    const id = await setupMatch()
+    render(<Scorecard matchId={id} onBack={onBack} onResume={onResume} />)
+    await waitFor(() => expect(screen.getByLabelText('Home')).toBeInTheDocument())
   })
 
   it('shows result banner for completed match', async () => {

@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getMatch, updateMatch, getBalls, addBall, removeLastBall, updateBall, appendAudit } from '../db'
-import { calculateScore, getCurrentOver, ballDisplay, formatOvers, restoreStateFromBalls } from '../utils/scoring'
+import { getMatch, updateMatch, getBalls, addBall, removeLastBall, updateBall, deleteBall, appendAudit } from '../db'
+import { calculateScore, getCurrentOver, ballDisplay, formatOvers, restoreStateFromBalls, nextAvailableBatsman } from '../utils/scoring'
 import { isFeatureEnabled } from '../settings'
 import { needsBowlerAtBoundary, currentInPlayStep } from '../utils/matchFlow'
 import MiniScorebar from './MiniScorebar'
 import StartupFlow from './StartupFlow'
 import FlowOverlay from './FlowOverlay'
 import PlayerPicker from './PlayerPicker'
+import RunOptions from './RunOptions'
 import Icon from './Icon'
 
 // ScoringV2 — the guided (v2) scoring experience.
@@ -43,6 +44,8 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
   const [pendingNewBatsman, setPendingNewBatsman] = useState(null) // { ballId, end, defaultIndex }
   const [bowlerAckOver, setBowlerAckOver] = useState(null) // over index whose bowler was confirmed
   const [redoStack, setRedoStack] = useState([]) // balls removed by undo, awaiting redo
+  const [editingBall, setEditingBall] = useState(null) // ball being corrected
+  const [editRuns, setEditRuns] = useState(0)
 
   const auditEnabled = settings.auditLog !== false
   const detailedWicket = isFeatureEnabled(settings, 'detailedWicket')
@@ -162,6 +165,19 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
 
   // swapRuns = the original tap value (for strike rotation); runs = the mapped value stored.
   async function recordBall({ runs = 0, swapRuns, isExtra = false, extraType: et = null, extraRuns: er = 0, isWicket = false, dismissalType = null, outBatsmanIndex = null }) {
+    // The incoming batsman is the lowest roster index that is not out and not the
+    // surviving batsman — NOT max(striker,nonStriker)+1, which skips gaps and picks
+    // a non-existent player when batsmen came in out of order.
+    const outIdx = isWicket ? (outBatsmanIndex ?? striker) : null
+    const surviving = isWicket ? (outIdx === striker ? nonStriker : striker) : null
+    const outSet = new Set(
+      Object.entries(score.batsmen)
+        .filter(([, b]) => b.howOut && b.howOut !== 'not out')
+        .map(([i]) => Number(i))
+    )
+    if (isWicket) outSet.add(outIdx)
+    const autoNext = isWicket ? nextAvailableBatsman(surviving, surviving, outSet) : null
+
     const ball = {
       matchId,
       innings,
@@ -177,12 +193,11 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
       batsmanIndex: striker,
       outBatsmanIndex: isWicket ? (outBatsmanIndex ?? striker) : undefined,
       // Stamp the default incoming batsman so replay/restore is exact; the guided
-      // new-batsman step (below) can override this.
-      newBatsmanIndex: isWicket ? Math.max(striker, nonStriker) + 1 : undefined,
+      // new-batsman step can override this.
+      newBatsmanIndex: isWicket ? autoNext : undefined,
       bowlerIndex: bowlerIdx,
       bowlerName: getPlayerName('bowl', bowlerIdx),
     }
-    const autoNext = isWicket ? Math.max(striker, nonStriker) + 1 : null
     setRedoStack([]) // a new forward action invalidates the redo history
     const ballId = await addBall(ball)
     await record(isWicket ? 'wicket' : 'ballAdded', { ball: { ...ball, id: ballId } })
@@ -262,6 +277,37 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
   function swapStriker() {
     setStriker(nonStriker)
     setNonStriker(striker)
+  }
+
+  // --- Edit / correct a recorded ball ---
+  function openEditBall(ball) {
+    setEditingBall(ball)
+    // Wides are edited by their extra (penalty) runs; everything else by batsman runs.
+    setEditRuns(ball.isExtra && ball.extraType === 'wide' ? (ball.extraRuns || 0) : (ball.runs || 0))
+  }
+
+  async function saveEditBall() {
+    const b = editingBall
+    const changes = (b.isExtra && b.extraType === 'wide')
+      ? { extraRuns: editRuns }
+      : { runs: editRuns, tapRuns: editRuns }
+    await updateBall(b.id, changes)
+    await record('ballEdited', { ball: { ...b, ...changes } })
+    setEditingBall(null)
+    const updatedBalls = await getBalls(matchId, innings)
+    setBalls(updatedBalls)
+    applyDerivedState(updatedBalls)
+  }
+
+  async function deleteEditBall() {
+    const b = editingBall
+    await deleteBall(b.id)
+    await record('ballEdited', { ball: { ...b, deleted: true } })
+    setEditingBall(null)
+    setRedoStack([])
+    const updatedBalls = await getBalls(matchId, innings)
+    setBalls(updatedBalls)
+    applyDerivedState(updatedBalls)
   }
 
   function handleRunTap(tap) {
@@ -495,11 +541,7 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
         ) : (
           <>
             <p className="flow-label">{wicketDismissalType.replace(/\b\w/g, c => c.toUpperCase())} — runs scored</p>
-            <div className="flow-options">
-              {[0, 1, 2, 3, 4, 6].map(n => (
-                <button key={n} className={`flow-option${wicketRuns === n ? ' selected' : ''}`} onClick={() => setWicketRuns(n)}>{n}</button>
-              ))}
-            </div>
+            <RunOptions value={wicketRuns} onChange={setWicketRuns} />
             {wicketDismissalType === 'run out' && (
               <>
                 <p className="flow-label">Who is out?</p>
@@ -604,7 +646,8 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
             if (b.isWicket) cls += ' wicket'
             else if (b.runs === 4 || b.runs === 6) cls += ' boundary'
             else if (b.isExtra) cls += ' extra'
-            return <div key={i} className={cls}>{ballDisplay(b)}</div>
+            // Tap a delivery to correct it.
+            return <button key={i} type="button" className={cls} aria-label={`Edit ball ${ballDisplay(b)}`} onClick={() => openEditBall(b)}>{ballDisplay(b)}</button>
           })}
           {currentOverBalls.length === 0 && <span style={{ color: '#999', fontSize: 13 }}>New over</span>}
         </div>
@@ -640,11 +683,7 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
                 <p style={{ marginBottom: 8, fontWeight: 600, color: '#666', fontSize: 14 }}>
                   {wicketDismissalType.replace(/\b\w/g, c => c.toUpperCase())} — Runs scored:
                 </p>
-                <div className="extras-runs">
-                  {[0, 1, 2, 3, 4, 6].map(n => (
-                    <button key={n} className={wicketRuns === n ? 'selected' : ''} onClick={() => setWicketRuns(n)}>{n}</button>
-                  ))}
-                </div>
+                <RunOptions value={wicketRuns} onChange={setWicketRuns} />
                 {wicketDismissalType === 'run out' && (
                   <>
                     <p style={{ margin: '10px 0 8px', fontWeight: 600, color: '#666', fontSize: 14 }}>Who is out?</p>
@@ -677,15 +716,10 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
                 <p style={{ marginBottom: 8, fontWeight: 600, color: '#666', fontSize: 14 }}>
                   {extraType === 'noBall' ? 'No Ball — batsman runs:' : extraType === 'wide' ? 'Wide — total runs:' : 'Runs:'}
                 </p>
-                <div className="extras-runs">
-                  {[0, 1, 2, 3, 4, 6].map(n => {
-                    const isNoBall = extraType === 'noBall'
-                    const selected = isNoBall ? noBallBatsmanRuns === n : extraRuns === n
-                    return (
-                      <button key={n} className={selected ? 'selected' : ''} onClick={() => (isNoBall ? setNoBallBatsmanRuns(n) : setExtraRuns(n))}>{n}</button>
-                    )
-                  })}
-                </div>
+                <RunOptions
+                  value={extraType === 'noBall' ? noBallBatsmanRuns : extraRuns}
+                  onChange={extraType === 'noBall' ? setNoBallBatsmanRuns : setExtraRuns}
+                />
                 <button className="btn btn-primary" style={{ width: '100%', marginTop: 12 }} onClick={confirmExtra}>Confirm {extraType === 'noBall' ? 'No Ball' : extraType === 'wide' ? 'Wide' : 'Extra'}</button>
               </>
             )}
@@ -703,6 +737,24 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
               <button className="sheet-option" onClick={onBack}>Home</button>
             </div>
             <button className="sheet-cancel" onClick={closeSheet}>Close</button>
+          </div>
+        </div>
+      )}
+
+      {editingBall && (
+        <div className="bottom-sheet-overlay" onClick={() => setEditingBall(null)}>
+          <div className="bottom-sheet" onClick={e => e.stopPropagation()}>
+            <h3>Edit Ball</h3>
+            <p style={{ marginBottom: 4, fontWeight: 600, color: '#666', fontSize: 14 }}>
+              {ballDisplay(editingBall)}{editingBall.isExtra ? ` (${editingBall.extraType})` : ''}{editingBall.isWicket ? ' — wicket' : ''}
+            </p>
+            <p className="flow-label" style={{ marginTop: 8 }}>
+              {editingBall.isExtra && editingBall.extraType === 'wide' ? 'Wide runs' : editingBall.isExtra && editingBall.extraType === 'noBall' ? 'Batsman runs' : 'Runs'}
+            </p>
+            <RunOptions value={editRuns} onChange={setEditRuns} />
+            <button className="btn btn-primary" style={{ width: '100%', marginTop: 14 }} onClick={saveEditBall}>Save</button>
+            <button className="btn btn-danger" style={{ width: '100%', marginTop: 8 }} onClick={deleteEditBall}>Delete Ball</button>
+            <button className="sheet-cancel" onClick={() => setEditingBall(null)}>Cancel</button>
           </div>
         </div>
       )}
