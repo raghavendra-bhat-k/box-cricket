@@ -21,7 +21,7 @@ function pad(names = [], size) {
 //
 // Persistence is delegated to the parent (ScoringV2) via onToss / onOpenings so
 // audit logging and DB writes stay in one place.
-export default function StartupFlow({ match, settings, onToss, onOpenings }) {
+export default function StartupFlow({ match, settings, onToss, onOpenings, onHome }) {
   const [toss, setToss] = useState({ wonBy: null, decision: null })
   const [phase, setPhase] = useState('striker') // 'striker' | 'nonStriker' | 'bowler'
   const [opening, setOpening] = useState({ striker: null, nonStriker: null, bowlerIndex: null })
@@ -34,7 +34,7 @@ export default function StartupFlow({ match, settings, onToss, onOpenings }) {
   if (needToss) {
     const canConfirm = toss.wonBy && toss.decision
     return (
-      <FlowOverlay title="Toss" subtitle="Who won the toss, and what did they choose?">
+      <FlowOverlay title="Toss" subtitle="Who won the toss, and what did they choose?" onHome={onHome}>
         <p className="flow-label">Toss won by</p>
         <div className="flow-options">
           {['A', 'B'].map(side => (
@@ -87,7 +87,7 @@ export default function StartupFlow({ match, settings, onToss, onOpenings }) {
 
   if (phase === 'striker') {
     return (
-      <FlowOverlay title="Opening Batsmen" subtitle={`${batTeam.name} to bat`} step={1} total={3}>
+      <FlowOverlay title="Opening Batsmen" subtitle={`${batTeam.name} to bat`} step={1} total={3} onHome={onHome}>
         <p className="flow-label">Select the striker</p>
         <PlayerPicker
           roster={batRoster}
@@ -104,7 +104,7 @@ export default function StartupFlow({ match, settings, onToss, onOpenings }) {
 
   if (phase === 'nonStriker') {
     return (
-      <FlowOverlay title="Opening Batsmen" subtitle={`Striker: ${nameFor(batRoster, opening.striker, 'Batsman')}`} step={2} total={3} onBack={() => setPhase('striker')}>
+      <FlowOverlay title="Opening Batsmen" subtitle={`Striker: ${nameFor(batRoster, opening.striker, 'Batsman')}`} step={2} total={3} onBack={() => setPhase('striker')} onHome={onHome}>
         <p className="flow-label">Select the non-striker</p>
         <PlayerPicker
           roster={batRoster}
@@ -122,7 +122,7 @@ export default function StartupFlow({ match, settings, onToss, onOpenings }) {
 
   // phase === 'bowler'
   return (
-    <FlowOverlay title="Opening Bowler" subtitle={`${bowlTeam.name} to bowl`} step={3} total={3} onBack={() => setPhase('nonStriker')}>
+    <FlowOverlay title="Opening Bowler" subtitle={`${bowlTeam.name} to bowl`} step={3} total={3} onBack={() => setPhase('nonStriker')} onHome={onHome}>
       <p className="flow-label">Select the bowler</p>
       <PlayerPicker
         roster={bowlRoster}
