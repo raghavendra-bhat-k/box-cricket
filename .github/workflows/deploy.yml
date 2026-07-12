@@ -1,0 +1,35 @@
+name: Deploy to GitHub Pages
+
+# Publishes the production build to the gh-pages branch (the configured Pages
+# source) on every push to main — so merging a PR deploys automatically.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Allow the built-in token to push to the gh-pages branch.
+permissions:
+  contents: write
+
+# Never run two deploys at once; let the newest win.
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Publish to gh-pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          npx gh-pages -d dist -m "Deploy ${{ github.sha }} [skip ci]"

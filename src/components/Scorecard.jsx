@@ -195,6 +195,9 @@ export default function Scorecard({ matchId, onBack, onResume, onShareSync }) {
       <div className="header">
         <button className="back-btn" onClick={onBack}>&larr;</button>
         <h2>Scorecard</h2>
+        <button className="header-home" onClick={onBack} aria-label="Home" title="Home">
+          <Icon name="home" size={22} label="Home" />
+        </button>
       </div>
 
       {match.result && <div className="result-banner">{match.result}</div>}

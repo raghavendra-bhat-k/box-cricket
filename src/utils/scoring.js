@@ -166,7 +166,7 @@ export function ballDisplay(ball) {
 // Lowest batting index that is neither out nor currently at the crease. Used as a
 // best-effort fallback for the incoming batsman only when it wasn't persisted on
 // the ball (older data) — skips batsmen who are already out (unlike a naive max+1).
-function nextAvailableBatsman(s, ns, outSet) {
+export function nextAvailableBatsman(s, ns, outSet) {
   let i = 0
   while (i === s || i === ns || outSet.has(i)) i++
   return i

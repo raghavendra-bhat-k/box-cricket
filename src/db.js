@@ -177,6 +177,15 @@ export async function removeLastBall(matchId, innings) {
   return null;
 }
 
+// Deletes a single ball by id (used by the v2 edit-ball flow). State is re-derived
+// from the remaining ball log, so removing a mid-innings ball is safe.
+export async function deleteBall(ballId) {
+  const ball = await db.balls.get(ballId);
+  await db.balls.delete(ballId);
+  if (ball?.matchId) await updateMatch(ball.matchId, {});
+  return ball;
+}
+
 export async function updateBall(ballId, changes) {
   const ball = await db.balls.get(ballId);
   const result = await db.balls.update(ballId, { ...changes, updatedAt: new Date().toISOString() });
