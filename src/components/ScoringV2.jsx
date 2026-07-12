@@ -48,6 +48,7 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
   const detailedWicket = isFeatureEnabled(settings, 'detailedWicket')
   const forceBowler = isFeatureEnabled(settings, 'forceBowlerEachOver')
   const undoRedo = isFeatureEnabled(settings, 'undoRedo')
+  const homeButton = isFeatureEnabled(settings, 'homeButton')
 
   const record = useCallback(async (action, payload) => {
     if (auditEnabled) await appendAudit({ matchId, action, payload })
@@ -92,6 +93,16 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadData() }, [loadData])
+
+  // Back-button guard: push a history entry so the browser/hardware back button
+  // routes home instead of exiting the (installed) PWA. Gated by the home setting.
+  useEffect(() => {
+    if (!homeButton) return
+    window.history.pushState({ boxCricketScoring: true }, '')
+    const onPop = () => { onBack?.() }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [homeButton, onBack])
 
   if (!match) return <div className="container">Loading...</div>
 
@@ -434,6 +445,7 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
         }}
         onToss={handleToss}
         onOpenings={handleOpenings}
+        onHome={homeButton ? onBack : undefined}
       />
     )
   }
@@ -450,6 +462,7 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
         <button className="btn btn-primary btn-large" style={{ marginTop: 20 }} onClick={startSecondInnings}>Start 2nd Innings</button>
         <button className="btn btn-secondary" style={{ marginTop: 10, width: '100%' }} onClick={() => setShowInningsBreak(false)}>← Continue in 1st Innings</button>
         <button className="btn btn-secondary" style={{ marginTop: 10, width: '100%' }} onClick={onViewScorecard}>View Scorecard</button>
+        {homeButton && <button className="btn btn-secondary" style={{ marginTop: 10, width: '100%' }} onClick={onBack}>Home</button>}
       </div>
     )
   }
@@ -472,7 +485,7 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
 
   if (inPlayStep === 'wicket') {
     return (
-      <FlowOverlay title="Wicket" subtitle="How did the batsman get out?" onBack={closeWicketEntry}>
+      <FlowOverlay title="Wicket" subtitle="How did the batsman get out?" onBack={closeWicketEntry} onHome={homeButton ? onBack : undefined}>
         {!wicketDismissalType ? (
           <div className="player-picker-list">
             {['Bowled', 'Caught', 'Run Out', 'Stumped', 'LBW', 'Hit Wicket'].map(type => (
@@ -510,7 +523,7 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
     const batRoster = pad(battingTeam.players, battingPlayerCount)
     const defaultName = batRoster[pendingNewBatsman.defaultIndex] || `Batsman ${pendingNewBatsman.defaultIndex + 1}`
     return (
-      <FlowOverlay title="New Batsman" subtitle="Who comes in to bat?">
+      <FlowOverlay title="New Batsman" subtitle="Who comes in to bat?" onHome={homeButton ? onBack : undefined}>
         <button className="btn btn-primary btn-large" style={{ marginBottom: 14 }} onClick={() => setPendingNewBatsman(null)}>
           Continue with {defaultName}
         </button>
@@ -526,7 +539,7 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
     const defaultName = bowlRoster[bowlerIdx] || `Bowler ${bowlerIdx + 1}`
     const overNo = score.legalBalls / 6 + 1
     return (
-      <FlowOverlay title="New Bowler" subtitle={`Who bowls over ${overNo}?`}>
+      <FlowOverlay title="New Bowler" subtitle={`Who bowls over ${overNo}?`} onHome={homeButton ? onBack : undefined}>
         <button className="btn btn-primary btn-large" style={{ marginBottom: 14 }} onClick={() => selectBowlerForOver({ index: bowlerIdx })}>
           Continue with {defaultName}
         </button>

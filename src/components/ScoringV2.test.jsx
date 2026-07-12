@@ -317,6 +317,32 @@ describe('ScoringV2 - guided in-play flows', () => {
   })
 })
 
+describe('ScoringV2 - home button & back guard', () => {
+  it('routes the browser back button to home when enabled', async () => {
+    const id = await createV2Match()
+    renderV2(id, { guidedScoring: true, homeButton: true, toss: false, openingBatsmen: false })
+    await waitFor(() => screen.getByText('EX'))
+    // Simulate a hardware/browser back press.
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(onBack).toHaveBeenCalled()
+  })
+
+  it('shows a Home escape on the full-screen toss step', async () => {
+    const id = await createV2Match()
+    renderV2(id, { guidedScoring: true, homeButton: true, toss: true, openingBatsmen: true })
+    await waitFor(() => screen.getByText('Toss'))
+    fireEvent.click(screen.getByLabelText('Home'))
+    expect(onBack).toHaveBeenCalled()
+  })
+
+  it('has no Home escape on overlays when the home setting is off', async () => {
+    const id = await createV2Match()
+    renderV2(id, { guidedScoring: true, homeButton: false, toss: true, openingBatsmen: true })
+    await waitFor(() => screen.getByText('Toss'))
+    expect(screen.queryByLabelText('Home')).not.toBeInTheDocument()
+  })
+})
+
 describe('ScoringV2 - undo/redo', () => {
   // Guided but with the pre-match + in-play prompts off, so we start in scoring.
   const settings = { guidedScoring: true, undoRedo: true, toss: false, openingBatsmen: false, forceBowlerEachOver: false, detailedWicket: false, auditLog: true }

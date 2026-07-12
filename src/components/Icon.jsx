@@ -63,6 +63,13 @@ const PATHS = {
     </>
   ),
   chevron: <path d="M9 18l6-6-6-6" />,
+  home: (
+    <>
+      <path d="M3 11l9-8 9 8" />
+      <path d="M5 10v10h14V10" />
+      <path d="M9 20v-6h6v6" />
+    </>
+  ),
   settings: (
     <>
       <circle cx="12" cy="12" r="3" />
