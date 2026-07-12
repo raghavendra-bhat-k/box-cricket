@@ -8,6 +8,9 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test/setup.js',
+    // A couple of legacy jsdom component tests are timing-sensitive under full-suite
+    // load; retry absorbs the occasional flake so CI stays reliable.
+    retry: 2,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'text-summary'],

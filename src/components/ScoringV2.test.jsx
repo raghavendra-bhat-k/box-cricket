@@ -315,6 +315,62 @@ describe('ScoringV2 - bug fixes', () => {
     await waitFor(() => expect(screen.getByText(/Team A: 0\/0/)).toBeInTheDocument())
     expect(await getBalls(id, 1)).toHaveLength(0)
   })
+
+  it('Edit: a delivery can be turned into a wicket', async () => {
+    const id = await createV2Match()
+    renderV2(id, { guidedScoring: true, detailedWicket: false, toss: false, openingBatsmen: false })
+    await waitFor(() => screen.getByRole('button', { name: '0', exact: true }))
+    fireEvent.click(screen.getByRole('button', { name: '0', exact: true }))
+    // A dot leaves the score at 0/0, so wait for the over count to advance instead.
+    await waitFor(() => expect(screen.getByText(/0\.1 ov/)).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: /Edit ball/ }))
+    await waitFor(() => screen.getByText('Edit Ball'))
+    // Toggle the wicket switch, pick a dismissal, save.
+    fireEvent.click(screen.getByRole('switch', { name: 'Wicket' }))
+    fireEvent.click(screen.getByText('Caught'))
+    fireEvent.click(screen.getByText('Save'))
+    await waitFor(() => expect(screen.getByText(/Team A: 0\/1/)).toBeInTheDocument())
+    const balls = await getBalls(id, 1)
+    expect(balls[0].isWicket).toBe(true)
+    expect(balls[0].dismissalType).toBe('caught')
+  })
+
+  it('forced-bowler prompt reappears after undoing across an over boundary', async () => {
+    // 2-over guided match, force bowler on, openings preset.
+    const id = await createV2Match({
+      playersPerSide: 6, totalOvers: 2,
+      teamAPlayers: ['a1', 'a2', 'a3', 'a4', 'a5', 'a6'],
+      teamBPlayers: ['b1', 'b2', 'b3', 'b4', 'b5', 'b6'],
+    })
+    await db.matches.update(id, {
+      toss: { wonBy: 'A', decision: 'bat', battingFirst: 'A' },
+      openingSetup: { striker: 0, nonStriker: 1, bowlerIndex: 0 },
+    })
+    // Seed the first 5 legal balls so the test only drives the boundary itself.
+    for (let i = 0; i < 5; i++) {
+      await addBall({
+        matchId: id, innings: 1, over: 0, ballInOver: i, runs: 0, tapRuns: 0,
+        isExtra: false, extraType: null, extraRuns: 0, isWicket: false,
+        dismissalType: null, batsmanIndex: 0, bowlerIndex: 0, bowlerName: 'b1',
+      })
+    }
+    const settings = { guidedScoring: true, forceBowlerEachOver: true, toss: false, openingBatsmen: false, detailedWicket: false }
+    renderV2(id, settings)
+    await waitFor(() => expect(screen.getByText(/0\.5 ov/)).toBeInTheDocument())
+
+    // The 6th ball completes the over → forced-bowler step; confirm it.
+    fireEvent.click(screen.getByRole('button', { name: '0', exact: true }))
+    await waitFor(() => screen.getByText(/Who bowls over 2/))
+    fireEvent.click(screen.getByText(/Continue with/))
+    await waitFor(() => expect(screen.getByText(/1\.0 ov/)).toBeInTheDocument())
+
+    // Undo the last ball (back to 0.5), then re-bowl it.
+    fireEvent.click(screen.getByText('Undo'))
+    await waitFor(() => expect(screen.getByText(/0\.5 ov/)).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: '0', exact: true }))
+    // The prompt must show again — it must NOT silently skip (bowlerAckOver reset).
+    await waitFor(() => expect(screen.getByText(/Who bowls over 2/)).toBeInTheDocument())
+  })
 })
 
 describe('ScoringV2 - guided in-play flows', () => {

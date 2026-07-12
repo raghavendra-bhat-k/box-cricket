@@ -46,6 +46,8 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
   const [redoStack, setRedoStack] = useState([]) // balls removed by undo, awaiting redo
   const [editingBall, setEditingBall] = useState(null) // ball being corrected
   const [editRuns, setEditRuns] = useState(0)
+  const [editIsWicket, setEditIsWicket] = useState(false)
+  const [editDismissal, setEditDismissal] = useState(null)
 
   const auditEnabled = settings.auditLog !== false
   const detailedWicket = isFeatureEnabled(settings, 'detailedWicket')
@@ -256,6 +258,9 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
     // replay the exact step. Drop the auto-increment id so re-adding is clean.
     const { id, ...ballForRedo } = removed // eslint-disable-line no-unused-vars
     setRedoStack(prev => [...prev, ballForRedo])
+    // Removing a ball may move us back across an over boundary — clear the bowler
+    // acknowledgement so the forced-bowler prompt shows again if we re-cross it.
+    setBowlerAckOver(null)
     const updatedBalls = await getBalls(matchId, innings)
     setBalls(updatedBalls)
     applyDerivedState(updatedBalls)
@@ -284,6 +289,8 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
     setEditingBall(ball)
     // Wides are edited by their extra (penalty) runs; everything else by batsman runs.
     setEditRuns(ball.isExtra && ball.extraType === 'wide' ? (ball.extraRuns || 0) : (ball.runs || 0))
+    setEditIsWicket(!!ball.isWicket)
+    setEditDismissal(ball.dismissalType || null)
   }
 
   async function saveEditBall() {
@@ -291,6 +298,23 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
     const changes = (b.isExtra && b.extraType === 'wide')
       ? { extraRuns: editRuns }
       : { runs: editRuns, tapRuns: editRuns }
+    changes.isWicket = editIsWicket
+    if (editIsWicket) {
+      // The batsman on strike for that delivery is the one dismissed. (Run-out of
+      // the non-striker still needs delete + re-enter — the non-striker isn't on
+      // the ball record.)
+      changes.dismissalType = editDismissal || 'bowled'
+      changes.outBatsmanIndex = b.batsmanIndex
+      const outSet = new Set(
+        Object.entries(score.batsmen).filter(([, x]) => x.howOut && x.howOut !== 'not out').map(([i]) => Number(i))
+      )
+      outSet.add(b.batsmanIndex)
+      changes.newBatsmanIndex = nextAvailableBatsman(nonStriker, nonStriker, outSet)
+    } else {
+      changes.dismissalType = null
+      changes.outBatsmanIndex = null
+      changes.newBatsmanIndex = null
+    }
     await updateBall(b.id, changes)
     await record('ballEdited', { ball: { ...b, ...changes } })
     setEditingBall(null)
@@ -305,6 +329,8 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
     await record('ballEdited', { ball: { ...b, deleted: true } })
     setEditingBall(null)
     setRedoStack([])
+    // Deleting a ball may move us back across an over boundary — re-prompt the bowler.
+    setBowlerAckOver(null)
     const updatedBalls = await getBalls(matchId, innings)
     setBalls(updatedBalls)
     applyDerivedState(updatedBalls)
@@ -752,6 +778,34 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
               {editingBall.isExtra && editingBall.extraType === 'wide' ? 'Wide runs' : editingBall.isExtra && editingBall.extraType === 'noBall' ? 'Batsman runs' : 'Runs'}
             </p>
             <RunOptions value={editRuns} onChange={setEditRuns} />
+
+            <div className="settings-row" style={{ borderBottom: 'none', marginTop: 6 }}>
+              <div className="settings-label"><strong>Wicket</strong></div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={editIsWicket}
+                aria-label="Wicket"
+                className={`toggle-switch${editIsWicket ? ' on' : ''}`}
+                onClick={() => { setEditIsWicket(v => !v); if (!editIsWicket && !editDismissal) setEditDismissal('bowled') }}
+              >
+                <span className="toggle-knob" />
+              </button>
+            </div>
+            {editIsWicket && (
+              <>
+                <p className="flow-label">Dismissal</p>
+                <div className="sheet-options">
+                  {['Bowled', 'Caught', 'Run Out', 'Stumped', 'LBW', 'Hit Wicket'].map(type => {
+                    const val = type.toLowerCase()
+                    return (
+                      <button key={type} className={`sheet-option${editDismissal === val ? ' selected' : ''}`} onClick={() => setEditDismissal(val)}>{type}</button>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+
             <button className="btn btn-primary" style={{ width: '100%', marginTop: 14 }} onClick={saveEditBall}>Save</button>
             <button className="btn btn-danger" style={{ width: '100%', marginTop: 8 }} onClick={deleteEditBall}>Delete Ball</button>
             <button className="sheet-cancel" onClick={() => setEditingBall(null)}>Cancel</button>
