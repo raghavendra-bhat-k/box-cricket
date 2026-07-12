@@ -36,5 +36,4 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           npx gh-pages -d dist \
             -r "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
-            -u "github-actions[bot] <github-actions[bot]@users.noreply.github.com>" \
             -m "Deploy ${{ github.sha }} [skip ci]"
