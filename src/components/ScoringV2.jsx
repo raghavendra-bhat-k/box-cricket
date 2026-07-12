@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getMatch, updateMatch, getBalls, addBall, removeLastBall, appendAudit } from '../db'
+import { getMatch, updateMatch, getBalls, addBall, removeLastBall, updateBall, appendAudit } from '../db'
 import { calculateScore, getCurrentOver, ballDisplay, formatOvers, restoreStateFromBalls } from '../utils/scoring'
 import { isFeatureEnabled } from '../settings'
+import { needsBowlerAtBoundary, currentInPlayStep } from '../utils/matchFlow'
 import MiniScorebar from './MiniScorebar'
 import StartupFlow from './StartupFlow'
+import FlowOverlay from './FlowOverlay'
+import PlayerPicker from './PlayerPicker'
 import Icon from './Icon'
 
 // ScoringV2 — the guided (v2) scoring experience.
@@ -35,8 +38,14 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
   const [extraType, setExtraType] = useState(null)
   const [extraRuns, setExtraRuns] = useState(1)
   const [noBallBatsmanRuns, setNoBallBatsmanRuns] = useState(0)
+  // In-play guided (v2) flow state.
+  const [wicketFlow, setWicketFlow] = useState(false) // full-screen wicket entry active
+  const [pendingNewBatsman, setPendingNewBatsman] = useState(null) // { ballId, end, defaultIndex }
+  const [bowlerAckOver, setBowlerAckOver] = useState(null) // over index whose bowler was confirmed
 
   const auditEnabled = settings.auditLog !== false
+  const detailedWicket = isFeatureEnabled(settings, 'detailedWicket')
+  const forceBowler = isFeatureEnabled(settings, 'forceBowlerEachOver')
 
   const record = useCallback(async (action, payload) => {
     if (auditEnabled) await appendAudit({ matchId, action, payload })
@@ -154,14 +163,15 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
       dismissalType,
       batsmanIndex: striker,
       outBatsmanIndex: isWicket ? (outBatsmanIndex ?? striker) : undefined,
-      // Stamp the default incoming batsman so replay/restore is exact. The Phase 5
-      // guided flow will let the scorer override this.
+      // Stamp the default incoming batsman so replay/restore is exact; the guided
+      // new-batsman step (below) can override this.
       newBatsmanIndex: isWicket ? Math.max(striker, nonStriker) + 1 : undefined,
       bowlerIndex: bowlerIdx,
       bowlerName: getPlayerName('bowl', bowlerIdx),
     }
-    await addBall(ball)
-    await record(isWicket ? 'wicket' : 'ballAdded', { ball })
+    const autoNext = isWicket ? Math.max(striker, nonStriker) + 1 : null
+    const ballId = await addBall(ball)
+    await record(isWicket ? 'wicket' : 'ballAdded', { ball: { ...ball, id: ballId } })
 
     const updatedBalls = await getBalls(matchId, innings)
     setBalls(updatedBalls)
@@ -174,7 +184,8 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
     const newIsAllOut = newScore.wickets >= battingPlayerCount - 1
     const newIsOversComplete = newScore.legalBalls >= totalBalls
     const newTargetChased = innings === 2 && firstInningsScore != null && newScore.runs > firstInningsScore
-    if (newIsAllOut || newIsOversComplete || newTargetChased) {
+    const inningsOver = newIsAllOut || newIsOversComplete || newTargetChased
+    if (inningsOver) {
       if (innings === 1 && !newTargetChased) {
         setFirstInningsScore(newScore.runs)
         setInningsEndReason(newIsAllOut ? 'all-out' : 'overs-complete')
@@ -183,6 +194,9 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
         await endMatch(newScore)
       }
     }
+    // Which end the incoming batsman occupies after any strike rotation.
+    const end = restored.striker === autoNext ? 'striker' : restored.nonStriker === autoNext ? 'nonStriker' : 'striker'
+    return { ballId, isWicket, autoNext, end, inningsOver }
   }
 
   async function handleUndo() {
@@ -213,20 +227,75 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
     recordBall({ runs: getMappedRuns(tap), swapRuns: tap })
   }
 
+  function handleWicketTap() {
+    if (isInningsOver) return
+    if (detailedWicket) setWicketFlow(true)
+    else setSheet('wicket')
+  }
+
   function selectWicketType(type) {
     setWicketDismissalType(type)
     setWicketRuns(0)
     setWicketOutBatsman(type === 'run out' ? striker : null)
   }
 
-  function confirmWicket() {
-    recordBall({
+  async function confirmWicket() {
+    const res = await recordBall({
       runs: wicketRuns,
       isWicket: true,
       dismissalType: wicketDismissalType,
       outBatsmanIndex: wicketDismissalType === 'run out' ? wicketOutBatsman : striker,
     })
-    closeSheet()
+    closeWicketEntry()
+    // In the guided flow, prompt for the incoming batsman (default pre-selected).
+    if (detailedWicket && res.isWicket && !res.inningsOver && res.autoNext != null && res.autoNext < battingPlayerCount) {
+      setPendingNewBatsman({ ballId: res.ballId, end: res.end, defaultIndex: res.autoNext })
+    }
+  }
+
+  function closeWicketEntry() {
+    setSheet(null)
+    setWicketFlow(false)
+    setWicketDismissalType(null)
+    setWicketRuns(0)
+    setWicketOutBatsman(null)
+  }
+
+  // Guided new-batsman selection: override the default incoming batsman by index
+  // or a typed name, then re-derive positions from the (updated) ball log.
+  async function selectNewBatsman({ index, name }) {
+    const { ballId, end } = pendingNewBatsman
+    if (name) {
+      const players = [...(battingTeam.players || [])]
+      while (players.length <= index) players.push('')
+      players[index] = name
+      await updateMatch(matchId, { [battingKey]: { ...battingTeam, players } })
+      setMatch(prev => ({ ...prev, [battingKey]: { ...prev[battingKey], players } }))
+    }
+    await updateBall(ballId, { newBatsmanIndex: index })
+    await record('batsmanSelected', { index, end })
+    const updatedBalls = await getBalls(matchId, innings)
+    setBalls(updatedBalls)
+    const restored = restoreStateFromBalls(updatedBalls)
+    setStriker(restored.striker)
+    setNonStriker(restored.nonStriker)
+    setBowlerIdx(restored.bowlerIdx)
+    setPendingNewBatsman(null)
+  }
+
+  // Guided forced bowler selection at an over boundary.
+  async function selectBowlerForOver({ index, name }) {
+    if (name) {
+      const base = bowlingTeam.bowlingOrder?.length ? bowlingTeam.bowlingOrder : (bowlingTeam.players || [])
+      const order = [...base]
+      while (order.length <= index) order.push('')
+      order[index] = name
+      await updateMatch(matchId, { [bowlingKey]: { ...bowlingTeam, bowlingOrder: order } })
+      setMatch(prev => ({ ...prev, [bowlingKey]: { ...prev[bowlingKey], bowlingOrder: order } }))
+    }
+    setBowlerIdx(index)
+    setBowlerAckOver(score.legalBalls / 6)
+    await record('bowlerSelected', { index, over: score.legalBalls / 6 })
   }
 
   function confirmExtra() {
@@ -364,6 +433,78 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
     )
   }
 
+  // ── Guided in-play full-screen steps (wicket → new batsman → new bowler) ──
+  const needBowler = !isInningsOver && match.status !== 'completed' &&
+    needsBowlerAtBoundary({ legalBalls: score.legalBalls, forceBowlerEachOver: forceBowler, ackOver: bowlerAckOver })
+  const inPlayStep = currentInPlayStep({ wicketFlow, pendingNewBatsman, needBowler })
+  const pad = (arr = [], n) => { const o = []; for (let i = 0; i < Math.max(arr.length, n); i++) o.push(arr[i] || ''); return o }
+
+  if (inPlayStep === 'wicket') {
+    return (
+      <FlowOverlay title="Wicket" subtitle="How did the batsman get out?" onBack={closeWicketEntry}>
+        {!wicketDismissalType ? (
+          <div className="player-picker-list">
+            {['Bowled', 'Caught', 'Run Out', 'Stumped', 'LBW', 'Hit Wicket'].map(type => (
+              <button key={type} className="player-option" onClick={() => selectWicketType(type.toLowerCase())}>{type}</button>
+            ))}
+          </div>
+        ) : (
+          <>
+            <p className="flow-label">{wicketDismissalType.replace(/\b\w/g, c => c.toUpperCase())} — runs scored</p>
+            <div className="flow-options">
+              {[0, 1, 2, 3, 4, 6].map(n => (
+                <button key={n} className={`flow-option${wicketRuns === n ? ' selected' : ''}`} onClick={() => setWicketRuns(n)}>{n}</button>
+              ))}
+            </div>
+            {wicketDismissalType === 'run out' && (
+              <>
+                <p className="flow-label">Who is out?</p>
+                <div className="flow-options">
+                  <button className={`flow-option${wicketOutBatsman === striker ? ' selected' : ''}`} onClick={() => setWicketOutBatsman(striker)}>{getPlayerName('bat', striker)} (striker)</button>
+                  <button className={`flow-option${wicketOutBatsman === nonStriker ? ' selected' : ''}`} onClick={() => setWicketOutBatsman(nonStriker)}>{getPlayerName('bat', nonStriker)}</button>
+                </div>
+              </>
+            )}
+            <button className="btn btn-primary btn-large flow-confirm" onClick={confirmWicket}>Confirm Wicket</button>
+          </>
+        )}
+      </FlowOverlay>
+    )
+  }
+
+  if (inPlayStep === 'newBatsman') {
+    const survivingIdx = pendingNewBatsman.end === 'striker' ? nonStriker : striker
+    const outIdxs = Object.entries(score.batsmen).filter(([, s]) => s.howOut).map(([i]) => Number(i))
+    const disabled = [survivingIdx, ...outIdxs]
+    const batRoster = pad(battingTeam.players, battingPlayerCount)
+    const defaultName = batRoster[pendingNewBatsman.defaultIndex] || `Batsman ${pendingNewBatsman.defaultIndex + 1}`
+    return (
+      <FlowOverlay title="New Batsman" subtitle="Who comes in to bat?">
+        <button className="btn btn-primary btn-large" style={{ marginBottom: 14 }} onClick={() => setPendingNewBatsman(null)}>
+          Continue with {defaultName}
+        </button>
+        <p className="flow-label">…or choose someone else</p>
+        <PlayerPicker roster={batRoster} defaultLabel="Batsman" disabledIndexes={disabled} onSelect={selectNewBatsman} />
+      </FlowOverlay>
+    )
+  }
+
+  if (inPlayStep === 'bowler') {
+    const bowlingSize = (bowlingKey === 'teamA' ? match.teamASize : match.teamBSize) ?? match.playersPerSide
+    const bowlRoster = pad(bowlingTeam.bowlingOrder?.length ? bowlingTeam.bowlingOrder : bowlingTeam.players, bowlingSize)
+    const defaultName = bowlRoster[bowlerIdx] || `Bowler ${bowlerIdx + 1}`
+    const overNo = score.legalBalls / 6 + 1
+    return (
+      <FlowOverlay title="New Bowler" subtitle={`Who bowls over ${overNo}?`}>
+        <button className="btn btn-primary btn-large" style={{ marginBottom: 14 }} onClick={() => selectBowlerForOver({ index: bowlerIdx })}>
+          Continue with {defaultName}
+        </button>
+        <p className="flow-label">…or choose someone else</p>
+        <PlayerPicker roster={bowlRoster} defaultLabel="Bowler" onSelect={selectBowlerForOver} />
+      </FlowOverlay>
+    )
+  }
+
   const curBowlName = getPlayerName('bowl', bowlerIdx)
   const bowlStat = score.bowlers[curBowlName] ?? score.bowlers[bowlerIdx]
 
@@ -403,7 +544,7 @@ export default function ScoringV2({ matchId, settings = {}, onBack, onViewScorec
           const isMapped = mapped !== tap
           return <button key={tap} className={`score-btn-lg boundary${isMapped ? ' mapped' : ''}`} onClick={() => handleRunTap(tap)}>{isMapped ? `${tap}→${mapped}` : String(tap)}</button>
         })}
-        <button className="score-btn-lg wicket" onClick={() => { if (!isInningsOver) setSheet('wicket') }}>W</button>
+        <button className="score-btn-lg wicket" onClick={handleWicketTap}>W</button>
         <button className="score-btn-lg extra" onClick={() => { if (!isInningsOver) setSheet('extras') }}>EX</button>
       </div>
 
