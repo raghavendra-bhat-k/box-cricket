@@ -816,3 +816,120 @@ describe('restoreStateFromBalls — batsman scoring scenarios', () => {
     expect(state.striker).toBe(0)
   })
 })
+
+// ─── restoreStateFromBalls — bye/leg-bye rotation matrix (doc 09 B.3) ──
+
+describe('restoreStateFromBalls — bye/leg-bye rotation matrix', () => {
+  it.each([
+    ['bye', 1, true], ['bye', 2, false], ['bye', 3, true], ['bye', 4, false],
+    ['legBye', 1, true], ['legBye', 2, false], ['legBye', 3, true], ['legBye', 4, false],
+  ])('%s of %i runs rotates strike: %s', (extraType, runs, shouldRotate) => {
+    const state = restoreStateFromBalls([makeBall({ runs, isExtra: true, extraType })])
+    if (shouldRotate) {
+      expect(state.striker).toBe(1)
+      expect(state.nonStriker).toBe(0)
+    } else {
+      expect(state.striker).toBe(0)
+      expect(state.nonStriker).toBe(1)
+    }
+  })
+})
+
+// ─── calculateScore — bowler runs on bye/leg-bye (doc 09 B.3b) ──────────
+
+describe('calculateScore — bowler runs on bye/leg-bye', () => {
+  // Per the Laws, byes/leg-byes are debited to the team but not the bowler. The
+  // app currently does NOT make this distinction (a known, documented divergence —
+  // see docs/testing/09-domain-vs-implementation-diff.md, A.5b) — this test pins
+  // down the current (divergent) behavior so a future fix is a deliberate change.
+  it('bye runs are currently added to the bowler\'s conceded runs', () => {
+    const s = calculateScore([makeBall({ runs: 3, isExtra: true, extraType: 'bye', bowlerIndex: 0 })])
+    expect(s.bowlers[0].runs).toBe(3)
+  })
+
+  it('leg-bye runs are currently added to the bowler\'s conceded runs', () => {
+    const s = calculateScore([makeBall({ runs: 2, isExtra: true, extraType: 'legBye', bowlerIndex: 0 })])
+    expect(s.bowlers[0].runs).toBe(2)
+  })
+})
+
+// ─── calculateScore — non-run-out dismissal with recorded runs (doc 09 B.4) ──
+
+describe('calculateScore — non-run-out wicket types with non-zero runs', () => {
+  // The UI does not restrict the runs picker per dismissal type, so a scorer can
+  // (incorrectly, per the Laws) record e.g. "Caught, 4 runs" — a known, documented
+  // divergence (docs/testing/09-domain-vs-implementation-diff.md, A.4). This test
+  // pins down that the entered runs are simply added, regardless of type.
+  it.each(['bowled', 'caught', 'lbw', 'stumped', 'hit wicket'])(
+    'credits the recorded runs for a %s dismissal',
+    (dismissalType) => {
+      const s = calculateScore([makeBall({ runs: 4, isWicket: true, dismissalType })])
+      expect(s.runs).toBe(4)
+      expect(s.batsmen[0].runs).toBe(4)
+    }
+  )
+})
+
+// ─── restoreStateFromBalls — run-out placement matrix (doc 09 B.5) ─────
+
+describe('restoreStateFromBalls — run-out placement matrix', () => {
+  it('striker run out on 3 completed runs (odd, crossed): survivor takes strike', () => {
+    const state = restoreStateFromBalls([
+      makeBall({ runs: 3, isWicket: true, dismissalType: 'run out', batsmanIndex: 0 }),
+    ])
+    expect(state.striker).toBe(1)
+    expect(state.nonStriker).toBe(2)
+  })
+
+  it('non-striker run out on 1 completed run: new batsman ends up on strike', () => {
+    const state = restoreStateFromBalls([
+      makeBall({ runs: 1, isWicket: true, dismissalType: 'run out', batsmanIndex: 0, outBatsmanIndex: 1 }),
+    ])
+    expect(state.striker).toBe(2)
+    expect(state.nonStriker).toBe(0)
+  })
+
+  it('non-striker run out on 2 completed runs: original striker keeps strike', () => {
+    const state = restoreStateFromBalls([
+      makeBall({ runs: 2, isWicket: true, dismissalType: 'run out', batsmanIndex: 0, outBatsmanIndex: 1 }),
+    ])
+    expect(state.striker).toBe(0)
+    expect(state.nonStriker).toBe(2)
+  })
+})
+
+// ─── restoreStateFromBalls — wicket + end-of-over for every dismissal type (doc 09 B.6) ──
+
+describe('restoreStateFromBalls — wicket coincides with end of over, all dismissal types', () => {
+  it.each(['caught', 'lbw', 'stumped', 'hit wicket'])(
+    'a %s dismissal on the 6th ball still gives strike to the not-out batsman next over',
+    (dismissalType) => {
+      const balls = [
+        makeBall({ runs: 0 }), makeBall({ runs: 0 }), makeBall({ runs: 0 }),
+        makeBall({ runs: 0 }), makeBall({ runs: 0 }),
+        makeBall({ runs: 0, isWicket: true, dismissalType }),
+      ]
+      const state = restoreStateFromBalls(balls)
+      expect(state.striker).toBe(1)
+      expect(state.nonStriker).toBe(2)
+      expect(state.bowlerIdx).toBe(1)
+    }
+  )
+})
+
+// ─── calculateScore — runMap tally uses the mapped value (doc 09 B.12) ──
+
+describe('calculateScore — batsman runs/fours/sixes use the mapped (recorded) value', () => {
+  it('a tap mapped onto 4 is tallied as a four, even though the physical tap was 3', () => {
+    const s = calculateScore([makeBall({ runs: 4, tapRuns: 3, batsmanIndex: 0 })])
+    expect(s.batsmen[0].runs).toBe(4)
+    expect(s.batsmen[0].fours).toBe(1)
+  })
+
+  it('a tap mapped onto 5 is not tallied as a four or a six', () => {
+    const s = calculateScore([makeBall({ runs: 5, tapRuns: 4, batsmanIndex: 0 })])
+    expect(s.batsmen[0].runs).toBe(5)
+    expect(s.batsmen[0].fours).toBe(0)
+    expect(s.batsmen[0].sixes).toBe(0)
+  })
+})
