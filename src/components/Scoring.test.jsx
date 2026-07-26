@@ -1241,3 +1241,213 @@ describe('Scoring - wicket display shows runs', () => {
     })
   })
 })
+
+// ─── Innings ending mid-over (doc 09 B.7) ───────────────────────
+
+describe('Scoring - innings/match ending mid-over', () => {
+  it('all-out mid-over (not on the last ball of the over) shows innings break immediately', async () => {
+    const id = await createMatch({
+      teamA: 'Small', teamB: 'Big', totalOvers: 6, playersPerSide: 3,
+      teamAPlayers: ['A', 'B', 'C'], teamBPlayers: ['D', 'E', 'F'],
+    })
+    // 2 dot balls, then the 3rd ball (mid-over, not the 6th) is the all-out wicket.
+    await addBall({ matchId: id, innings: 1, over: 0, ballInOver: 0, runs: 0, batsmanIndex: 0, bowlerIndex: 0 })
+    await addBall({ matchId: id, innings: 1, over: 0, ballInOver: 1, runs: 0, batsmanIndex: 0, bowlerIndex: 0 })
+    await addBall({
+      matchId: id, innings: 1, over: 0, ballInOver: 2, runs: 0,
+      isWicket: true, dismissalType: 'bowled', batsmanIndex: 0, bowlerIndex: 0,
+    })
+
+    renderScoring(id)
+    const wicketBtn = () => screen.getByRole('button', { name: 'W' })
+    await waitFor(() => wicketBtn())
+
+    fireEvent.click(wicketBtn())
+    await waitFor(() => screen.getByText('Bowled'))
+    fireEvent.click(screen.getByText('Bowled'))
+    await waitFor(() => screen.getByText('Confirm'))
+    fireEvent.click(screen.getByText('Confirm'))
+
+    await waitFor(() => {
+      expect(screen.getByText('End of 1st Innings')).toBeInTheDocument()
+    })
+  })
+
+  it('target exceeded mid-over (not on the last ball) ends the match immediately', async () => {
+    const id = await createMatch({
+      teamA: 'A', teamB: 'B', totalOvers: 6, playersPerSide: 6,
+      teamAPlayers: ['A1', 'A2', 'A3', 'A4', 'A5', 'A6'],
+      teamBPlayers: ['B1', 'B2', 'B3', 'B4', 'B5', 'B6'],
+    })
+    // 1st innings: 5 runs off 1 ball, then completed via all-out for a low, easy target.
+    await addBall({ matchId: id, innings: 1, over: 0, ballInOver: 0, runs: 5, batsmanIndex: 0, bowlerIndex: 0 })
+    for (let i = 0; i < 5; i++) {
+      await addBall({
+        matchId: id, innings: 1, over: 0, ballInOver: i + 1, runs: 0,
+        isWicket: true, dismissalType: 'bowled', batsmanIndex: 0, outBatsmanIndex: 0, bowlerIndex: 0,
+      })
+    }
+    await db.matches.update(id, { currentInnings: 2 })
+    // 2nd innings, mid-over (2nd ball): a six takes the total past the target of 6.
+    await addBall({ matchId: id, innings: 2, over: 0, ballInOver: 0, runs: 0, batsmanIndex: 0, bowlerIndex: 0 })
+
+    renderScoring(id)
+    // Wait for the target (derived from the async-loaded firstInningsScore) before
+    // tapping — the score buttons render before that fetch resolves.
+    await waitFor(() => screen.getByText(/Target: 6/))
+    const sixBtn = Array.from(document.querySelectorAll('.score-btn-lg.boundary')).find(b => b.textContent === '6')
+    fireEvent.click(sixBtn)
+
+    await waitFor(async () => {
+      const m = await db.matches.get(id)
+      expect(m.status).toBe('completed')
+    })
+  })
+})
+
+// ─── Mid-innings threshold recompute (doc 09 B.8/B.9) ───────────
+
+describe('Scoring - mid-innings settings changes recompute thresholds on the next ball', () => {
+  it('a team-size increase raises the all-out threshold for the very next ball', async () => {
+    const id = await createMatch({
+      teamA: 'Small', teamB: 'Big', totalOvers: 6, playersPerSide: 3,
+      teamAPlayers: ['A', 'B', 'C'], teamBPlayers: ['D', 'E', 'F'],
+    })
+    // 1 wicket down — with playersPerSide=3, all-out threshold is wickets >= 2.
+    await addBall({
+      matchId: id, innings: 1, over: 0, ballInOver: 0, runs: 0,
+      isWicket: true, dismissalType: 'bowled', batsmanIndex: 0, bowlerIndex: 0,
+    })
+
+    renderScoring(id)
+    await waitFor(() => screen.getByText('W'))
+
+    // Increase Team A's size to 5 — raises the all-out threshold to wickets >= 4.
+    const menuBtn = document.querySelector('.menu-dots')
+    fireEvent.click(menuBtn)
+    await waitFor(() => screen.getByText('Change Team Sizes'))
+    fireEvent.click(screen.getByText('Change Team Sizes'))
+    await waitFor(() => screen.getByText('Small players'))
+    const input = screen.getAllByDisplayValue('3')[0] // Team A ("Small") is listed first
+    fireEvent.change(input, { target: { value: '5' } })
+    fireEvent.click(screen.getByText('Save'))
+
+    await waitFor(async () => {
+      const m = await db.matches.get(id)
+      expect(m.teamASize).toBe(5)
+    })
+
+    // A 2nd wicket (wickets=2) would have been all-out at size 3, but is not at size 5.
+    const wicketBtn = () => screen.getByRole('button', { name: 'W' })
+    await waitFor(() => wicketBtn())
+    fireEvent.click(wicketBtn())
+    await waitFor(() => screen.getByText('Bowled'))
+    fireEvent.click(screen.getByText('Bowled'))
+    await waitFor(() => screen.getByText('Confirm'))
+    fireEvent.click(screen.getByText('Confirm'))
+
+    // Only 3 named players exist, so the "who's next?" picker isn't triggered here
+    // (autoNextStriker === named-player count) — the match simply continues.
+    await waitFor(() => {
+      expect(screen.queryByText('End of 1st Innings')).not.toBeInTheDocument()
+    })
+  })
+
+  it('an overs increase raises the overs-complete threshold for the very next ball', async () => {
+    const id = await createMatch({
+      teamA: 'A', teamB: 'B', totalOvers: 1, playersPerSide: 6,
+      teamAPlayers: ['A1', 'A2', 'A3', 'A4', 'A5', 'A6'],
+      teamBPlayers: ['B1', 'B2', 'B3', 'B4', 'B5', 'B6'],
+    })
+    // 5 balls bowled — the 6th would end the innings at totalOvers=1.
+    for (let i = 0; i < 5; i++) {
+      await addBall({
+        matchId: id, innings: 1, over: 0, ballInOver: i, runs: 1,
+        batsmanIndex: 0, bowlerIndex: 0,
+      })
+    }
+
+    renderScoring(id)
+    await waitFor(() => screen.getByText('W'))
+
+    // Increase total overs to 2 before the 6th ball is recorded.
+    const menuBtn = document.querySelector('.menu-dots')
+    fireEvent.click(menuBtn)
+    await waitFor(() => screen.getByText('Change Overs'))
+    fireEvent.click(screen.getByText('Change Overs'))
+    await waitFor(() => screen.getByText('Total Overs'))
+    const input = screen.getByDisplayValue('1')
+    fireEvent.change(input, { target: { value: '2' } })
+    fireEvent.click(screen.getByText('Save'))
+
+    await waitFor(async () => {
+      const m = await db.matches.get(id)
+      expect(m.totalOvers).toBe(2)
+    })
+
+    // 6th ball: would have completed the innings at totalOvers=1, but not at 2.
+    const zeroBtn = Array.from(document.querySelectorAll('.score-btn-lg.run')).find(b => b.textContent === '0')
+    fireEvent.click(zeroBtn)
+
+    expect(screen.queryByText('End of 1st Innings')).not.toBeInTheDocument()
+  })
+})
+
+// ─── Settings changes are not retroactive (doc 09 B.10) ─────────
+
+describe('Scoring - settings changes do not retroactively alter recorded balls', () => {
+  it('changing overs mid-match leaves already-recorded balls and the current score unchanged', async () => {
+    const id = await createTestMatch()
+    await addBall({ matchId: id, innings: 1, over: 0, ballInOver: 0, runs: 4, batsmanIndex: 0, bowlerIndex: 0 })
+    await addBall({ matchId: id, innings: 1, over: 0, ballInOver: 1, runs: 1, batsmanIndex: 0, bowlerIndex: 0 })
+
+    renderScoring(id)
+    await waitFor(() => screen.getByText(/5\/0/))
+
+    const menuBtn = document.querySelector('.menu-dots')
+    fireEvent.click(menuBtn)
+    await waitFor(() => screen.getByText('Change Overs'))
+    fireEvent.click(screen.getByText('Change Overs'))
+    await waitFor(() => screen.getByText('Total Overs'))
+    fireEvent.change(screen.getByDisplayValue('6'), { target: { value: '10' } })
+    fireEvent.click(screen.getByText('Save'))
+
+    await waitFor(async () => {
+      const m = await db.matches.get(id)
+      expect(m.totalOvers).toBe(10)
+    })
+
+    const ballsAfter = await getBalls(id, 1)
+    expect(ballsAfter).toHaveLength(2)
+    expect(ballsAfter[0].runs).toBe(4)
+    expect(ballsAfter[1].runs).toBe(1)
+    expect(screen.getByText(/5\/0/)).toBeInTheDocument()
+  })
+})
+
+// ─── disabledRuns in-match effect (doc 09 B.13) ──────────────────
+
+describe('Scoring - custom rule disabledRuns hides the tap in-match', () => {
+  it('a disabled run has no tap button in the scoring grid', async () => {
+    const id = await createTestMatch({ rules: { disabledRuns: [3] } })
+    renderScoring(id)
+    await waitFor(() => screen.getByText('W'))
+
+    const grid = document.querySelector('.score-grid-large')
+    expect(within(grid).queryByText('3')).not.toBeInTheDocument()
+    // Other run buttons remain reachable.
+    expect(within(grid).getByText('0')).toBeInTheDocument()
+    expect(within(grid).getByText('4')).toBeInTheDocument()
+  })
+
+  it('disabling every run value leaves only Wicket and Extras reachable', async () => {
+    const id = await createTestMatch({ rules: { disabledRuns: [0, 1, 2, 3, 4, 6] } })
+    renderScoring(id)
+    await waitFor(() => screen.getByText('W'))
+
+    const grid = document.querySelector('.score-grid-large')
+    expect(grid.querySelectorAll('.run, .boundary')).toHaveLength(0)
+    expect(within(grid).getByText('W')).toBeInTheDocument()
+    expect(within(grid).getByText('EX')).toBeInTheDocument()
+  })
+})
