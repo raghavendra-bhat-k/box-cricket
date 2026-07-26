@@ -190,6 +190,13 @@ export function restoreStateFromBalls(ballHistory) {
       s = bi
     }
 
+    // The recorded bowlerIndex is the ground truth for who bowled this delivery, so
+    // re-sync to it every ball — otherwise a chosen opening bowler (or a forced
+    // end-of-over pick) is lost as soon as the ball log is replayed. The over-end
+    // increment below then serves only as the DEFAULT next-over bowler, which the
+    // next ball's own bowlerIndex overrides when it is bowled.
+    if (ball.bowlerIndex != null) bowler = ball.bowlerIndex
+
     const isLegal = !ball.isExtra || (ball.extraType !== 'wide' && ball.extraType !== 'noBall')
 
     // tapRuns = physical runs before mapping (stored in ball). Fall back to ball.runs for backward compat.
