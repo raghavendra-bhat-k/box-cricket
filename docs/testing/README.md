@@ -30,7 +30,8 @@ regression planning, and identifying automated-test gaps.
 6. [06-scorecard-sharing-and-pwa.md](./06-scorecard-sharing-and-pwa.md) — `Scorecard.jsx` display/sharing, PWA/offline behavior
 7. [07-domain-ball-outcomes.md](./07-domain-ball-outcomes.md) — anchor-based, implementation-independent before/after state: a fixed anchor state with every possible ball outcome enumerated, re-anchored at each position (first ball, last ball of over/innings/match)
 8. [08-domain-context-and-flow-scenarios.md](./08-domain-context-and-flow-scenarios.md) — the version and settings axes layered on top of doc 07's anchors: v1 vs v2 app-version expectations and mid-match settings changes
-9. [09-domain-vs-implementation-diff.md](./09-domain-vs-implementation-diff.md) — Part A: where the actual code diverges from the domain spec (docs 07–08), labeled simplification vs. divergence; Part B: which domain scenarios have no automated test, independent of Part A
+9. [09-domain-vs-implementation-diff.md](./09-domain-vs-implementation-diff.md) — Part A: where the actual code diverges from the domain spec (docs 07–08, 10), labeled simplification vs. divergence; Part B: which domain scenarios have no automated test, independent of Part A
+10. [10-custom-scoring-rules-outcomes.md](./10-custom-scoring-rules-outcomes.md) — how `runMap`/`disabledRuns` custom rules change ball outcomes: score by the recorded value but rotate strike by the physical tap (e.g. tap 1 → records 2 but swaps ends)
 
 ## Known app-wide non-features (do not test as bugs)
 

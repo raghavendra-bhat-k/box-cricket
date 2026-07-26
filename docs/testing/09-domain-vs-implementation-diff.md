@@ -49,6 +49,19 @@ Two independent comparisons against the domain-derived scenarios in
 | B.9 | Overs increase mid-innings recalculating the overs-complete threshold on the very next ball (08 §3.3) | ❌ No test found for the increase direction (decrease + `Math.ceil` clamp is tested per doc 05/A.15, increase is not) |
 | B.10 | Settings changed mid-match not retroactively altering already-recorded balls (08 §3.5) | ❌ No test found |
 | B.11 | v2 redo after undo, then diverging with a new ball, invalidating stale redo history (already flagged as a gap in doc 03 §4.6) | ❌ No test |
+| B.12 | Batsman run/four/six crediting under `runMap` (doc 10 rows 10.3/10.4/10.5) — a tap-3-mapped-to-4 should count as a four; a tap-4-mapped-to-5 should not | ❌ No test — the `tapRuns` rotation is tested, but no test asserts the fours/sixes tally or batsman-runs value uses the *recorded* (mapped) value |
+| B.13 | `disabledRuns` reachability (doc 10 rows 10.10–10.12) — a disabled run has no tap path, but a `runMap` onto it still reaches it; all-runs-disabled degenerate case | ❌ No test found for the scoring-time effect of `disabledRuns` (config-level round-trip is tested in `NewMatch.test.jsx`/`db.test.js`, but not the in-match consequence) |
+
+## A note on the custom-rules contract (Part A)
+
+The `runMap`/`disabledRuns` scoring-time behavior (doc 10) is a house-rule feature, not
+standard cricket, so its "expected" behavior is defined by the feature's own contract rather
+than the Laws. The implementation **matches** that contract: score/batsman/bowler/tally use
+the mapped (recorded) value, while strike rotation uses the tapped value — confirmed in
+`Scoring.jsx` (`handleRunTap` → `recordBall({ runs: getMappedRuns(tap), swapRuns: tap })`,
+`tapRuns` persisted, `physicalRuns` used for `runsForRotation`) and mirrored in
+`ScoringV2.jsx`. So there is no Part-A divergence for custom rules — only the Part-B test
+gaps above.
 
 ## How to use this document
 

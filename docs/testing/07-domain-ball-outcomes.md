@@ -15,6 +15,12 @@ implementation would do something different, that is not corrected here — it's
 separately in [09-domain-vs-implementation-diff.md](./09-domain-vs-implementation-diff.md).
 Read this as the "expected" (oracle) side of the comparison.
 
+> **Custom scoring rules:** the tables below assume the tapped run value equals the recorded
+> value. When a match uses `runMap`/`disabledRuns` (custom rules), a tapped value can record
+> as a different value while strike rotation still follows the physical tap — this changes
+> the after-state of many rows here. Those variants are in
+> [10-custom-scoring-rules-outcomes.md](./10-custom-scoring-rules-outcomes.md).
+
 ### Outcome set enumerated at each anchor
 
 | Group | Values |
