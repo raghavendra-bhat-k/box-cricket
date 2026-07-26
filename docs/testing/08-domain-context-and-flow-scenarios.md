@@ -13,15 +13,14 @@ unlike doc 07's "what should a correct scorer do" framing — this doc's version
 sections describe **what the app's own advertised feature set commits to**, independent of
 whether the current code delivers on it. Implementation gaps are still deferred to doc 09.
 
-## Ball-position context modifiers
+## Ball-position context
 
-| # | Context | Expected additional effect (on top of the atomic outcome) |
-|---|---------|----------------------------------------------------------|
-| 1.1 | 1st ball of the innings | Both batsmen start at 0/0, bowler at 0/0/0, no extras yet; the outcome applies against an all-zero baseline |
-| 1.2 | Mid-over, not the 6th ball | Baseline — no additional effect beyond the atomic outcome |
-| 1.3 | 6th legal ball of the over | Regardless of the ball's own run parity, ends swap **and** a new bowler takes the next over. A wicket falling on this ball still triggers the end-of-over swap on top of any wicket-driven replacement — worked example: 6th ball is a run-out with 1 completed run (ends already crossed once for the run) — the over-end swap then applies a *second* crossing, so the batsman who was originally on strike ends up back on strike for the new over (net two crossings cancel) |
-| 1.4 | Ball that ends the innings (all batsmen out, or the over/ball limit reached) | The innings stops immediately at that ball, even mid-over — no further deliveries in the innings. Worked example: last recognized batsman given out mid-over — the innings ends right there, the remaining balls in that over are never bowled |
-| 1.5 | Ball that ends the match | In the second innings, the match ends the instant the chasing team's score strictly exceeds the target — even on the first ball of a new over, mid-over, off a boundary that overshoots what was needed. A ball that brings the score to *exactly* level with the target does **not** end the match by itself; the innings continues (next ball, over, or the overs/wickets limit) until it resolves as a tie or the target is later exceeded |
+The full before/after enumeration for each ball-position context — first ball of the
+innings, mid-over baseline, last (6th) ball of an over, last ball of the innings, and last
+ball of the match — is now in [07-domain-ball-outcomes.md](./07-domain-ball-outcomes.md) as
+Anchors A–E. That document is the authoritative source for how each outcome behaves at each
+position. This document covers only the two axes that layer on top of position: **app
+version** and **mid-match settings changes**.
 
 ## App-version scenarios (v1 "quick scoring" vs v2 "guided scoring")
 

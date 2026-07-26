@@ -28,8 +28,8 @@ regression planning, and identifying automated-test gaps.
 4. [04-innings-and-match-lifecycle.md](./04-innings-and-match-lifecycle.md) — innings completion, target/chase, results, resume
 5. [05-match-list-and-data-management.md](./05-match-list-and-data-management.md) — `MatchList.jsx`, Dexie schema, sync/export/import
 6. [06-scorecard-sharing-and-pwa.md](./06-scorecard-sharing-and-pwa.md) — `Scorecard.jsx` display/sharing, PWA/offline behavior
-7. [07-domain-ball-outcomes.md](./07-domain-ball-outcomes.md) — implementation-independent, domain-derived before/after state for every ball outcome (runs 0–6, wide/no-ball/bye/leg-bye at multiple values, every wicket type)
-8. [08-domain-context-and-flow-scenarios.md](./08-domain-context-and-flow-scenarios.md) — domain scenarios for ball position (1st ball, over/innings/match boundaries), v1 vs v2 app version expectations, and mid-match settings changes
+7. [07-domain-ball-outcomes.md](./07-domain-ball-outcomes.md) — anchor-based, implementation-independent before/after state: a fixed anchor state with every possible ball outcome enumerated, re-anchored at each position (first ball, last ball of over/innings/match)
+8. [08-domain-context-and-flow-scenarios.md](./08-domain-context-and-flow-scenarios.md) — the version and settings axes layered on top of doc 07's anchors: v1 vs v2 app-version expectations and mid-match settings changes
 9. [09-domain-vs-implementation-diff.md](./09-domain-vs-implementation-diff.md) — Part A: where the actual code diverges from the domain spec (docs 07–08), labeled simplification vs. divergence; Part B: which domain scenarios have no automated test, independent of Part A
 
 ## Known app-wide non-features (do not test as bugs)
