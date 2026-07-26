@@ -535,10 +535,13 @@ describe('restoreStateFromBalls', () => {
   })
 
   it('handles two complete overs correctly', () => {
-    // Over 1: 6 dots, Over 2: 6 dots
-    const balls = Array.from({ length: 12 }, () => makeBall({ runs: 0 }))
+    // Over 1 bowled by bowler 0, Over 2 by bowler 1 (as real ball data would record).
+    const balls = [
+      ...Array.from({ length: 6 }, () => makeBall({ runs: 0, bowlerIndex: 0 })),
+      ...Array.from({ length: 6 }, () => makeBall({ runs: 0, bowlerIndex: 1 })),
+    ]
     const state = restoreStateFromBalls(balls)
-    expect(state.bowlerIdx).toBe(2) // two bowler changes
+    expect(state.bowlerIdx).toBe(2) // default next bowler after 2 completed overs
     // Two end-of-over swaps cancel out
     expect(state.striker).toBe(0)
     expect(state.nonStriker).toBe(1)
@@ -584,15 +587,30 @@ describe('restoreStateFromBalls', () => {
   })
 
   it('restores correctly after 1.3 overs (9 legal balls)', () => {
-    // Simulating: 1 over (6 balls) + 3 more balls
+    // Simulating: 1 over (6 balls) by bowler 0 + 3 more balls of over 2 by bowler 1
     const balls = [
-      ...Array.from({ length: 6 }, () => makeBall({ runs: 0 })), // over 1 done
-      makeBall({ runs: 1 }), // ball 7: swap
-      makeBall({ runs: 0 }), // ball 8
-      makeBall({ runs: 0 }), // ball 9
+      ...Array.from({ length: 6 }, () => makeBall({ runs: 0, bowlerIndex: 0 })), // over 1 done
+      makeBall({ runs: 1, bowlerIndex: 1 }), // ball 7: swap
+      makeBall({ runs: 0, bowlerIndex: 1 }), // ball 8
+      makeBall({ runs: 0, bowlerIndex: 1 }), // ball 9
     ]
     const state = restoreStateFromBalls(balls)
-    expect(state.bowlerIdx).toBe(1) // 1 over completed = 1 bowler change
+    expect(state.bowlerIdx).toBe(1) // over 2 in progress, bowled by bowler 1
+  })
+
+  it('preserves a chosen opening bowler across the over (regression)', () => {
+    // Opening bowler #6 (index 5) bowls all 3 balls so far — must NOT revert to 0.
+    const balls = Array.from({ length: 3 }, () => makeBall({ runs: 0, bowlerIndex: 5 }))
+    expect(restoreStateFromBalls(balls).bowlerIdx).toBe(5)
+  })
+
+  it('honours a non-sequential bowler change between overs', () => {
+    // Over 1 by bowler 5, over 2 (in progress) by a forced pick of bowler 2.
+    const balls = [
+      ...Array.from({ length: 6 }, () => makeBall({ runs: 0, bowlerIndex: 5 })),
+      ...Array.from({ length: 2 }, () => makeBall({ runs: 0, bowlerIndex: 2 })),
+    ]
+    expect(restoreStateFromBalls(balls).bowlerIdx).toBe(2)
   })
 })
 

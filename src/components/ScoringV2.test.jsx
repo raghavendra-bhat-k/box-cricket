@@ -271,6 +271,21 @@ describe('ScoringV2 - bug fixes', () => {
     expect(balls[0].newBatsmanIndex).toBe(1)
   })
 
+  it('keeps the chosen opening bowler from the 2nd ball onward', async () => {
+    // Reproduces the reported defect: opening bowler #6 (index 5) reverting to #1.
+    const id = await sixPlayerMatch({ striker: 0, nonStriker: 1, bowlerIndex: 5 })
+    renderV2(id, { guidedScoring: true, toss: false, openingBatsmen: false, forceBowlerEachOver: false, detailedWicket: false })
+    await waitFor(() => screen.getByRole('button', { name: '1', exact: true }))
+    // First ball.
+    fireEvent.click(screen.getByRole('button', { name: '1', exact: true }))
+    await waitFor(() => expect(screen.getByText(/Team A: 1\/0/)).toBeInTheDocument())
+    // Second ball — must still be the chosen bowler, not index 0.
+    fireEvent.click(screen.getByRole('button', { name: '1', exact: true }))
+    await waitFor(() => expect(screen.getByText(/Team A: 2\/0/)).toBeInTheDocument())
+    const balls = await getBalls(id, 1)
+    expect(balls.map(b => b.bowlerIndex)).toEqual([5, 5])
+  })
+
   it('Bug 3: a no-ball can score 5 batsman runs via the custom input', async () => {
     const id = await createV2Match()
     renderV2(id, { guidedScoring: true, detailedWicket: false, toss: false, openingBatsmen: false })
